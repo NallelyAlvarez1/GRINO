@@ -3,7 +3,7 @@ import os
 import base64
 from datetime import datetime
 from fpdf import FPDF
-from database import save_presupuesto_completo, get_presupuesto_detallado
+from utils.database import save_presupuesto_completo, get_presupuesto_detallado
 
 def capitalizar(texto):
     return texto.capitalize()
@@ -86,7 +86,9 @@ def generar_pdf(cliente_nombre, categorias, lugar_cliente):
     pdf.cell(60, 6, capitalizar("Total"), border=1, align='R', fill=True)
     pdf.cell(30, 6, formato_moneda(total_general), border=1, align='R', ln=True)
 
-    return pdf
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        pdf.output(tmp.name)
+        return tmp.name
 
 def guardar_presupuesto_completo(presupuesto_id: int, categorias: dict, cliente_nombre: str, lugar_nombre: str):
     """Guarda el presupuesto en la base de datos y genera el PDF"""

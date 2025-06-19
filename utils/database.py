@@ -91,23 +91,29 @@ def create_lugar_trabajo(nombre: str, user_id: int) -> Optional[int]:
         conn.close()
 
 # ==================== FUNCIONES PARA PRESUPUESTOS ====================
-def create_presupuesto(cliente_id: int, lugar_trabajo_nombre: str, user_id: int) -> Optional[int]:
-    """Crea un nuevo presupuesto vacío"""
+def create_presupuesto(cliente_id, lugar_id, fecha, descripcion, total, detalles, user_id):
     conn = get_db()
     try:
         with conn.cursor() as cur:
             cur.execute(
-                """INSERT INTO presupuestos 
-                (cliente_id, lugar_trabajo, total, ruta_pdf, creado_por) 
-                VALUES (%s, %s, 0, '', %s) RETURNING id""",
-                (cliente_id, lugar_trabajo_nombre, user_id)
+                """
+                INSERT INTO presupuestos (cliente_id, lugar_id, fecha, descripcion, total, creado_por)
+                VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
+                """,
+                (cliente_id, lugar_id, fecha, descripcion, total, user_id)
             )
-            conn.commit()
-            return cur.fetchone()[0]
-    except Exception as e:
-        print(f"Error al crear presupuesto: {e}")
-        conn.rollback()
-        return None
+            presupuesto_id = cur.fetchone()[0]
+
+            for detalle in detalles:
+                cur.execute(
+                    """
+                    INSERT INTO presupuesto_detalles (presupuesto_id, categoria, descripcion, precio)
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    (presupuesto_id, *detalle)
+                )
+        conn.commit()
+        return presupuesto_id
     finally:
         conn.close()
 

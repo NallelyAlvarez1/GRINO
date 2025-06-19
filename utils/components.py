@@ -14,11 +14,11 @@ from utils.database import (
 
 # ==================== FUNCIONES DE PRESUPUESTO ====================
 # SECCION CLIENTE - LUGAR DE TRABAJO
-def show_cliente_lugar_selector() -> Tuple[int, int]:
-    # Verificación de autenticación
+def show_cliente_lugar_selector() -> Tuple[int, str, int, str]:
     if 'user_id' not in st.session_state:
         st.error("❌ No has iniciado sesión")
         st.stop()
+
     try:
         clientes = get_clientes()
         lugares = get_lugares_trabajo()
@@ -28,7 +28,6 @@ def show_cliente_lugar_selector() -> Tuple[int, int]:
 
     col1, col2 = st.columns(2)
 
-    # --- Cliente ---
     with col1:
         st.markdown("#### Cliente")
         cliente_id = _selector_entidad(
@@ -40,7 +39,8 @@ def show_cliente_lugar_selector() -> Tuple[int, int]:
             placeholder_nombre="Nombre de cliente",
             funcion_creacion=create_cliente
         )
-    # ---Lugar Trabajo ---
+        cliente_nombre = next((n for i, n in clientes if i == cliente_id), "Desconocido")
+
     with col2:
         st.markdown("#### Lugar de Trabajo")
         lugar_id = _selector_entidad(
@@ -52,8 +52,9 @@ def show_cliente_lugar_selector() -> Tuple[int, int]:
             placeholder_nombre="Nombre del lugar",
             funcion_creacion=create_lugar_trabajo
         )
+        lugar_nombre = next((n for i, n in lugares if i == lugar_id), "Desconocido")
 
-    return cliente_id, lugar_id
+    return cliente_id, cliente_nombre, lugar_id, lugar_nombre
 
 def _selector_entidad(
     datos: List[Tuple[int, str]],
