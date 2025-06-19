@@ -48,10 +48,10 @@ CREATE TABLE items_base (
 CREATE TABLE presupuestos (
     id SERIAL PRIMARY KEY,
     cliente_id INTEGER REFERENCES clientes(id) ON DELETE RESTRICT,
-    lugar_trabajo VARCHAR(255) NOT NULL,
+    lugar_trabajo_id INTEGER REFERENCES lugares_trabajo(id) ON DELETE RESTRICT,
     fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    descripcion TEXT,
     total NUMERIC(12, 2) NOT NULL,
-    ruta_pdf VARCHAR(255) NOT NULL,
     creado_por INTEGER REFERENCES usuarios(id),
     notas TEXT
 );
@@ -62,16 +62,14 @@ CREATE TABLE presupuestos (
 CREATE TABLE items_en_presupuesto (
     id SERIAL PRIMARY KEY,
     presupuesto_id INTEGER REFERENCES presupuestos(id) ON DELETE CASCADE,
-    item_base_id INTEGER REFERENCES items_base(id) ON DELETE SET NULL,  -- Permite borrar ítem base manteniendo histórico
     categoria_id INTEGER REFERENCES categorias(id) ON DELETE RESTRICT,
-    nombre_personalizado VARCHAR(100),  -- Para sobreescribir el nombre del ítem base
+    nombre_personalizado VARCHAR(100) NOT NULL,
     unidad VARCHAR(20) NOT NULL,
     cantidad INTEGER NOT NULL,
     precio_unitario NUMERIC(12, 2) NOT NULL,
     total NUMERIC(12, 2) GENERATED ALWAYS AS (cantidad * precio_unitario) STORED,
     notas TEXT
 );
-
 -- =============================================
 -- ÍNDICES PARA MEJORAR RENDIMIENTO
 -- =============================================
@@ -90,3 +88,5 @@ CREATE TABLE lugares_trabajo (
     creado_por INTEGER REFERENCES usuarios(id),
     fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE categorias ADD COLUMN creado_por INTEGER REFERENCES usuarios(id);

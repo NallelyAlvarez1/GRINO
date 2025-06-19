@@ -173,6 +173,7 @@ def selector_categoria(
                             try:
                                 nuevo_id = create_categoria(nuevo_nombre.strip(), st.session_state.user_id)
                                 st.session_state[f"categoria_actual_{key_suffix}"] = nuevo_id
+                                st.rerun()
                             except Exception as e:
                                 st.error(f"Error al crear categoría: {e}")
                 

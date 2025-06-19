@@ -91,29 +91,27 @@ def create_lugar_trabajo(nombre: str, user_id: int) -> Optional[int]:
         conn.close()
 
 # ==================== FUNCIONES PARA PRESUPUESTOS ====================
-def create_presupuesto(cliente_id, lugar_id, fecha, descripcion, total, detalles, user_id):
+def create_presupuesto(cliente_id: int, lugar_id: int, descripcion: str, total: float, user_id: int) -> Optional[int]:
+    """Crea un nuevo presupuesto y retorna su ID"""
     conn = get_db()
     try:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO presupuestos (cliente_id, lugar_id, fecha, descripcion, total, creado_por)
-                VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
+                INSERT INTO presupuestos 
+                (cliente_id, lugar_trabajo_id, fecha_creacion, descripcion, total, creado_por)
+                VALUES (%s, %s, CURRENT_TIMESTAMP, %s, %s, %s) 
+                RETURNING id
                 """,
-                (cliente_id, lugar_id, fecha, descripcion, total, user_id)
+                (cliente_id, lugar_id, descripcion, total, user_id)
             )
             presupuesto_id = cur.fetchone()[0]
-
-            for detalle in detalles:
-                cur.execute(
-                    """
-                    INSERT INTO presupuesto_detalles (presupuesto_id, categoria, descripcion, precio)
-                    VALUES (%s, %s, %s, %s)
-                    """,
-                    (presupuesto_id, *detalle)
-                )
-        conn.commit()
-        return presupuesto_id
+            conn.commit()
+            return presupuesto_id
+    except Exception as e:
+        print(f"Error al crear presupuesto: {e}")
+        conn.rollback()
+        return None
     finally:
         conn.close()
 
@@ -289,7 +287,7 @@ def save_presupuesto_completo(presupuesto_id: int, items_data: Dict[str, Any]) -
             # Insertar nuevos items
             for categoria, data in items_data.items():
                 # Insertar mano de obra como un item especial
-                if data['mano_obra'] > 0:
+                if data.get('mano_obra', 0) > 0:
                     cur.execute(
                         """INSERT INTO items_en_presupuesto 
                         (presupuesto_id, categoria_id, nombre_personalizado, unidad, cantidad, precio_unitario, notas)
@@ -301,15 +299,26 @@ def save_presupuesto_completo(presupuesto_id: int, items_data: Dict[str, Any]) -
                 for item in data['items']:
                     cur.execute(
                         """INSERT INTO items_en_presupuesto 
-                        (presupuesto_id, categoria_id, nombre_personalizado, unidad, cantidad, precio_unitario)
-                        VALUES (%s, (SELECT id FROM categorias WHERE nombre = %s), %s, %s, %s, %s)""",
-                        (presupuesto_id, categoria, item['nombre'], item['unidad'], item['cantidad'], item['precio_unitario']))
+                        (presupuesto_id, categoria_id, nombre_personalizado, unidad, cantidad, precio_unitario, notas)
+                        VALUES (%s, (SELECT id FROM categorias WHERE nombre = %s), %s, %s, %s, %s, %s)""",
+                        (presupuesto_id, categoria, item['nombre'], item['unidad'], item['cantidad'], item['precio_unitario'], item.get('notas', '')))
+            
+            # Actualizar el total del presupuesto
+            cur.execute(
+                """UPDATE presupuestos SET total = (
+                    SELECT COALESCE(SUM(total), 0) 
+                    FROM items_en_presupuesto 
+                    WHERE presupuesto_id = %s
+                ) WHERE id = %s""",
+                (presupuesto_id, presupuesto_id)
+            )
             
             conn.commit()
             return True
     except Exception as e:
         conn.rollback()
-        raise e
+        print(f"Error al guardar presupuesto completo: {e}")
+        return False
     finally:
         conn.close()
 
@@ -351,14 +360,14 @@ def get_categorias() -> List[Tuple[int, str]]:
     finally:
         conn.close()
 
-def create_categoria(nombre: str) -> int:
+def create_categoria(nombre: str, user_id: int) -> int:  # Añade user_id como parámetro
     """Crea una nueva categoría y retorna su ID"""
     conn = get_db()
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO categorias (nombre) VALUES (%s) RETURNING id",
-                (nombre,)
+                "INSERT INTO categorias (nombre, creado_por) VALUES (%s, %s) RETURNING id",  # Añade creado_por
+                (nombre, user_id)
             )
             conn.commit()
             return cur.fetchone()[0]

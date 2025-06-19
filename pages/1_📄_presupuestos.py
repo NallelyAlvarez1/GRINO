@@ -1,3 +1,4 @@
+from typing import Any, Dict
 import streamlit as st
 from datetime import datetime
 from utils.components import (
@@ -12,15 +13,30 @@ from utils.database import (
 )
 from utils.pdf import generar_pdf
 
+def calcular_total(items_data: Dict[str, Any]) -> float:
+    """Calcula el total general del presupuesto"""
+    total = 0
+    for categoria, data in items_data.items():
+        # Sumar items
+        total += sum(item['total'] for item in data['items'])
+        # Sumar mano de obra si existe
+        total += data.get('mano_obra', 0)
+    return total
 
 def main():
     st.title("📋 Generar Nuevo Presupuesto")
+
+    # Verificar autenticación
+    if 'user_id' not in st.session_state:
+        st.error("🔐 Por favor inicie sesión primero")
+        st.page_link("App_principal.py", label="Volver al inicio")
+        st.stop()
 
     st.subheader("Datos del Cliente", divider="blue")
     with st.status("Selección de cliente y lugar", expanded=True) as status:
         cliente_id, cliente_nombre, lugar_id, lugar_nombre = show_cliente_lugar_selector()
         if cliente_id and lugar_id:
-            status.update(label="✅Completado", state="complete", expanded=False)
+            status.update(label="✅ Completado", state="complete", expanded=False)
 
     if not (cliente_id and lugar_id):
         st.stop()
@@ -41,42 +57,64 @@ def main():
     st.subheader("🧮 Vista previa", divider="blue")
     show_resumen(items_data)
 
+    # Campo para descripción/notas
+    descripcion = st.text_area("Descripción / Notas del presupuesto:", height=100)
+
     # Paso 5: Guardar
     if st.button("📂 Guardar Presupuesto Completo", type="primary",
                 help="Revise todos los datos antes de guardar"):
 
         with st.spinner("Guardando presupuesto..."):
             try:
+                # Calcular total
+                total = calcular_total(items_data)
+                
+                # Crear presupuesto
                 presupuesto_id = create_presupuesto(
                     cliente_id=cliente_id,
                     lugar_id=lugar_id,
-                    fecha=datetime.now(),  # o la fecha que uses
-                    descripcion="",
-                    total=0,
-                    detalles=[]
+                    descripcion=descripcion,
+                    total=total,
+                    user_id=st.session_state.user_id
                 )
 
+                if not presupuesto_id:
+                    st.error("Error al crear el presupuesto")
+                    st.stop()
 
-                save_presupuesto_completo(presupuesto_id, items_data)
+                # Guardar items
+                if not save_presupuesto_completo(presupuesto_id, items_data):
+                    st.error("Error al guardar los items del presupuesto")
+                    st.stop()
 
+                # Generar PDF
                 pdf_path = generar_pdf(cliente_nombre, items_data, lugar_nombre)
-                with open(pdf_path, "rb") as f:
-                    st.download_button(
-                        "📄 Descargar PDF", f, file_name="presupuesto.pdf", mime="application/pdf")
-
+                
+                # Mostrar éxito y opciones
                 st.toast(f"Presupuesto #{presupuesto_id} guardado!", icon="✅")
                 st.success("""
                 Presupuesto guardado correctamente. 
                 ¿Qué deseas hacer ahora?
                 """)
 
+                # Botón para descargar PDF
+                with open(pdf_path, "rb") as f:
+                    st.download_button(
+                        "📄 Descargar PDF", 
+                        f, 
+                        file_name=f"presupuesto_{presupuesto_id}.pdf", 
+                        mime="application/pdf"
+                    )
+
                 cols = st.columns(3)
                 with cols[0]:
                     if st.button("🔄 Crear otro presupuesto"):
-                        st.session_state.clear()
+                        # Limpiar solo los datos del presupuesto, mantener sesión
+                        if 'categorias' in st.session_state:
+                            del st.session_state['categorias']
                         st.rerun()
                 with cols[1]:
-                    st.page_link("App_principal.py", label="📋 Ver Presupuestos")
+                    st.page_link("pages/2_🕒_historial.py", label="📋 Ver Presupuestos")
                 with cols[2]:
                     st.page_link("App_principal.py", label="🏠 Ir al Inicio")
 
@@ -85,8 +123,4 @@ def main():
                 st.exception(e)
 
 if __name__ == "__main__":
-    if 'user_id' in st.session_state:
-        main()
-    else:
-        st.error("🔐 Por favor inicie sesión primero")
-        st.page_link("App_principal.py", label="Volver al inicio")
+    main()
