@@ -5,7 +5,6 @@ import bcrypt
 import uuid
 from typing import List, Tuple, Optional, Dict, Any
 
-# Cargar variables de entorno
 load_dotenv()
 
 # ==================== FUNCIONES DE AUTENTICACIÓN ====================
@@ -120,7 +119,6 @@ def get_presupuesto_detallado(presupuesto_id: int) -> Optional[Dict[str, Any]]:
     conn = get_db()
     try:
         with conn.cursor() as cur:
-            # Obtener datos básicos del presupuesto
             cur.execute(
                 """SELECT p.id, p.fecha_creacion, p.total, p.notas,
                       c.id AS cliente_id, c.nombre AS cliente_nombre,
@@ -135,7 +133,6 @@ def get_presupuesto_detallado(presupuesto_id: int) -> Optional[Dict[str, Any]]:
             if not presupuesto:
                 return None
 
-            # Obtener items del presupuesto
             cur.execute(
                 """SELECT i.nombre_personalizado, i.unidad, i.cantidad, 
                       i.precio_unitario, i.total, i.notas,
@@ -168,11 +165,11 @@ def get_presupuesto_detallado(presupuesto_id: int) -> Optional[Dict[str, Any]]:
         conn.close()
 
 def get_presupuestos_usuario(user_id: int, filtros: Dict[str, Any] = None) -> List[Dict[str, Any]]:
-    """Obtiene todos los presupuestos del usuario con opción de filtrado"""
+    """Obtiene presupuestos con filtros avanzados"""
     conn = get_db()
     try:
         with conn.cursor() as cur:
-            query = """
+            base_query = """
                 SELECT p.id, p.fecha_creacion, p.total, p.notas,
                        c.id AS cliente_id, c.nombre AS cliente_nombre,
                        l.id AS lugar_id, l.nombre AS lugar_nombre
@@ -182,31 +179,36 @@ def get_presupuestos_usuario(user_id: int, filtros: Dict[str, Any] = None) -> Li
                 WHERE p.creado_por = %s
             """
             params = [user_id]
-
-            # Aplicar filtros si existen
+            
+            query_parts = [base_query]
+            
             if filtros:
                 if filtros.get('cliente_id'):
-                    query += " AND p.cliente_id = %s"
+                    query_parts.append(" AND p.cliente_id = %s")
                     params.append(filtros['cliente_id'])
+                
                 if filtros.get('lugar_id'):
-                    query += " AND p.lugar_trabajo_id = %s"
+                    query_parts.append(" AND p.lugar_trabajo_id = %s")
                     params.append(filtros['lugar_id'])
+                
                 if filtros.get('fecha_inicio'):
-                    query += " AND p.fecha_creacion >= %s"
+                    query_parts.append(" AND p.fecha_creacion >= %s")
                     params.append(filtros['fecha_inicio'])
+                
                 if filtros.get('fecha_fin'):
-                    query += " AND p.fecha_creacion <= %s"
+                    query_parts.append(" AND p.fecha_creacion <= %s")
                     params.append(filtros['fecha_fin'])
+                
                 if filtros.get('search'):
                     search = f"%{filtros['search']}%"
-                    query += " AND (c.nombre ILIKE %s OR l.nombre ILIKE %s OR p.notas ILIKE %s)"
+                    query_parts.append(" AND (c.nombre ILIKE %s OR l.nombre ILIKE %s OR p.notas ILIKE %s)")
                     params.extend([search, search, search])
-
-            query += " ORDER BY p.fecha_creacion DESC"
             
-            cur.execute(query, params)
-            resultados = cur.fetchall()
-
+            query_parts.append(" ORDER BY p.fecha_creacion DESC")
+            
+            final_query = "".join(query_parts)
+            cur.execute(final_query, params)
+            
             return [{
                 'id': row[0],
                 'fecha': row[1],
@@ -214,8 +216,12 @@ def get_presupuestos_usuario(user_id: int, filtros: Dict[str, Any] = None) -> Li
                 'notas': row[3],
                 'cliente': {'id': row[4], 'nombre': row[5]},
                 'lugar': {'id': row[6], 'nombre': row[7]},
-                'num_items': contar_items_presupuesto(row[0])  # Función adicional
-            } for row in resultados]
+                'num_items': contar_items_presupuesto(row[0])
+            } for row in cur.fetchall()]
+            
+    except Exception as e:
+        print(f"Error al obtener presupuestos: {e}")
+        return []
     finally:
         conn.close()
 
@@ -281,12 +287,9 @@ def save_presupuesto_completo(presupuesto_id: int, items_data: Dict[str, Any]) -
     conn = get_db()
     try:
         with conn.cursor() as cur:
-            # Eliminar items existentes para este presupuesto
             cur.execute("DELETE FROM items_en_presupuesto WHERE presupuesto_id = %s", (presupuesto_id,))
             
-            # Insertar nuevos items
             for categoria, data in items_data.items():
-                # Insertar mano de obra como un item especial
                 if data.get('mano_obra', 0) > 0:
                     cur.execute(
                         """INSERT INTO items_en_presupuesto 
@@ -295,7 +298,6 @@ def save_presupuesto_completo(presupuesto_id: int, items_data: Dict[str, Any]) -
                         (presupuesto_id, categoria, data['mano_obra'])
                     )
                 
-                # Insertar items normales
                 for item in data['items']:
                     cur.execute(
                         """INSERT INTO items_en_presupuesto 
@@ -303,7 +305,6 @@ def save_presupuesto_completo(presupuesto_id: int, items_data: Dict[str, Any]) -
                         VALUES (%s, (SELECT id FROM categorias WHERE nombre = %s), %s, %s, %s, %s, %s)""",
                         (presupuesto_id, categoria, item['nombre'], item['unidad'], item['cantidad'], item['precio_unitario'], item.get('notas', '')))
             
-            # Actualizar el total del presupuesto
             cur.execute(
                 """UPDATE presupuestos SET total = (
                     SELECT COALESCE(SUM(total), 0) 
@@ -360,13 +361,13 @@ def get_categorias() -> List[Tuple[int, str]]:
     finally:
         conn.close()
 
-def create_categoria(nombre: str, user_id: int) -> int:  # Añade user_id como parámetro
+def create_categoria(nombre: str, user_id: int) -> int: 
     """Crea una nueva categoría y retorna su ID"""
     conn = get_db()
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO categorias (nombre, creado_por) VALUES (%s, %s) RETURNING id",  # Añade creado_por
+                "INSERT INTO categorias (nombre, creado_por) VALUES (%s, %s) RETURNING id", 
                 (nombre, user_id)
             )
             conn.commit()

@@ -1,4 +1,3 @@
-# utils/auth.py
 import bcrypt
 import streamlit as st
 from utils.database import get_db
@@ -23,7 +22,6 @@ def require_login():
         st.switch_page("App_principal.py")
         st.stop()
 
-
 def authenticate(username: str, password: str) -> bool:
     """Autentica credenciales contra la DB y guarda el user_id"""
     try:
@@ -35,7 +33,7 @@ def authenticate(username: str, password: str) -> bool:
                 )
                 result = cur.fetchone()
                 if result and verify_password(password, result[1]):
-                    st.session_state.user_id = result[0]  # Guarda el ID
+                    st.session_state.user_id = result[0]
                     st.session_state.usuario = username
                     return True
         return False

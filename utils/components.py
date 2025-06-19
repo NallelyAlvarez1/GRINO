@@ -12,8 +12,7 @@ from utils.database import (
     contar_items_presupuesto
 )
 
-# ==================== FUNCIONES DE PRESUPUESTO ====================
-# SECCION CLIENTE - LUGAR DE TRABAJO
+# ==================== SECCION CLIENTE - LUGAR DE TRABAJO ====================
 def show_cliente_lugar_selector() -> Tuple[int, str, int, str]:
     if 'user_id' not in st.session_state:
         st.error("❌ No has iniciado sesión")
@@ -64,22 +63,18 @@ def _selector_entidad(
     modal_title: str,
     placeholder_nombre: str,
     funcion_creacion: callable
-) -> Optional[int]:  # Cambiado a Optional[int]
-    """Componente genérico para seleccionar/crear entidades"""
-    # Mapeo de IDs a nombres
+) -> Optional[int]:
+    """Componente para seleccionar/crear entidades"""
     nombres_por_id = {d[0]: d[1] for d in datos}
-    
-    # Agregar opción vacía al inicio
     options = [None] + [d[0] for d in datos] if datos else [None]
-    
-    # Selector con opción vacía por defecto
+
     seleccionado = st.selectbox(
         label,
         options=options,
         format_func=lambda id: "--- Seleccione ---" if id is None else nombres_por_id.get(id, "Desconocido"),
         key=f"select_{key}"
     )
-    # Popover para nuevo
+
     popover = st.popover(btn_nuevo, use_container_width=True)
     with popover:
         nombre = st.text_input(placeholder_nombre, key=f"input_nuevo_{key}")
@@ -104,34 +99,23 @@ def _selector_entidad(
 
     return st.session_state.get(f"{key}_actual", seleccionado)
 
-#SECCION CATEGORIA - ITEMS
+# ========== SECCIÓN CATEGORIA - ITEMS ==========
 def selector_categoria(
     mostrar_label: bool = True, 
     requerido: bool = True, 
     key_suffix: str = ""
 ) -> Tuple[Optional[int], Optional[str]]:
     """
-    Selector unificado de categorías con capacidad para crear nuevas.
-    
-    Args:
-        mostrar_label: Muestra el título "Categoría" si es True
-        requerido: Si es True, detiene la ejecución cuando no hay selección
-        key_suffix: Sufijo para las claves de Streamlit (evita colisiones)
-    
-    Returns:
-        Tuple (id_categoria, nombre_categoria) o (None, None)
+    Selector de categorías con capacidad para crear nuevas
     """
-    # Verificación de autenticación
     if 'user_id' not in st.session_state:
         st.error("❌ No autenticado")
         st.stop()
 
     try:
-        # Obtener categorías existentes
         categorias = get_categorias()
         nombres_por_id = {d[0]: d[1] for d in categorias}
         
-        # Configurar claves únicas
         select_key = f"select_categoria_{key_suffix}"
         btn_key = f"btn_nueva_categoria_{key_suffix}"
         input_key = f"input_nueva_categoria_{key_suffix}"
@@ -141,7 +125,6 @@ def selector_categoria(
             st.markdown("#### Categoría")
         
         if categorias:
-            # Opciones para el selectbox
             opciones = [(cat[0], cat[1]) for cat in categorias]
             
             categoria_id = st.selectbox(
@@ -157,7 +140,6 @@ def selector_categoria(
             st.info("No hay categorías registradas")
         btn_nuevo = st.button("➕ Agregar Categoria", key=btn_key, use_container_width=True)
 
-        # Modal para nueva categoría
         if btn_nuevo:
             with st.form(key=f"form_nueva_categoria_{key_suffix}", border=True):
                 nuevo_nombre = st.text_input("Nombre de la nueva categoría:", key=input_key)
@@ -181,7 +163,6 @@ def selector_categoria(
                     if st.form_submit_button("✖️ Cancelar"):
                         pass
 
-        # Manejo del estado
         categoria_id = st.session_state.get(f"categoria_actual_{key_suffix}", categoria_id)
         categoria_nombre = nombres_por_id.get(categoria_id, 
                                            nuevo_nombre if btn_nuevo and not categoria_id else "")
@@ -202,12 +183,10 @@ def show_items_presupuesto() -> Dict[str, Any]:
     if 'categorias' not in st.session_state:
         st.session_state['categorias'] = {}
 
-    # ========== SECCIÓN PRINCIPAL ==========    
-    # Contenedor para categorías e items
+    # ========== SECCIÓN CATEGORIA E ITEMS ==========    
     with st.container(border=True):
         col1, col2 = st.columns([2, 4])
         with col1:
-            # Selector de categoría
             st.markdown("#### 1️⃣ Seleccionar/Crear Categoría")
             categoria_id, categoria_nombre = selector_categoria(
                 mostrar_label=False,
@@ -216,7 +195,6 @@ def show_items_presupuesto() -> Dict[str, Any]:
             )
 
         with col2:
-            # Formulario para agregar items
             st.markdown(f"#### 2️⃣ Agregar Ítems a: {categoria_nombre}")
             
             col1, col2, col3 = st.columns(3)
@@ -243,7 +221,6 @@ def show_items_presupuesto() -> Dict[str, Any]:
                         if categoria_nombre not in st.session_state['categorias']:
                             st.session_state['categorias'][categoria_nombre] = {'items': [], 'mano_obra': 0}
 
-                        # Buscar ítem existente
                         items_cat = st.session_state['categorias'][categoria_nombre]['items']
                         item_existente = next((i for i in items_cat if i['nombre'] == nombre_item and i['unidad'] == unidad), None)
 
@@ -263,15 +240,13 @@ def show_items_presupuesto() -> Dict[str, Any]:
     
     # ========== SECCIÓN DE EDICIÓN ==========
     with st.expander("📝 Editar Items", expanded=False):
-        # Mostrar todas las categorías con sus ítems
         for cat, datos in st.session_state['categorias'].items():
             items = datos['items']
-            if not items:  # Si no hay items, saltar esta categoría
+            if not items: 
                 continue
                 
-            st.write(f"### {cat}")  # Mostrar el nombre de la categoría
+            st.write(f"### {cat}") 
 
-            # Mostrar encabezados
             col1, col2, col3, col4, col5, col6, col7 = st.columns([3, 2, 2, 2, 2, 0.8, 0.8])
             col1.write("**Nombre**")
             col2.write("**Unidad**")
@@ -281,7 +256,6 @@ def show_items_presupuesto() -> Dict[str, Any]:
             col6.write("**Guardar**")
             col7.write("**Eliminar**")
 
-            # Mostrar cada ítem con opciones de edición
             for index, item in enumerate(items):
                 col1, col2, col3, col4, col5, col6, col7 = st.columns([3, 2, 2, 2, 2, 0.8, 0.8])
 
@@ -322,13 +296,12 @@ def show_items_presupuesto() -> Dict[str, Any]:
                         st.rerun()
     
     return st.session_state['categorias']
-
-    # ========== SECCIÓN MANO DE OBRA ==========
+    
+# ========== SECCIÓN MANO DE OBRA ==========
 def show_mano_obra(items_data: Dict[str, Any]) -> None:
     with st.expander("Agregar Mano de Obra", expanded=False):
         st.markdown("### Configurar Mano de Obra")
         
-        # Selector de categoría existente para aplicar mano de obra
         categorias_con_items = [cat for cat in items_data.keys() if items_data[cat]['items']]
         
         if not categorias_con_items:
@@ -354,6 +327,7 @@ def show_mano_obra(items_data: Dict[str, Any]) -> None:
 
 
     # ========== SECCIÓN RESUMEN ==========
+
 def show_resumen(items_data: Dict[str, Any]) -> None:
     if not st.session_state['categorias']:
         st.info("No hay items agregados aún")
@@ -361,7 +335,6 @@ def show_resumen(items_data: Dict[str, Any]) -> None:
 
     total_general = 0
 
-    # Mostrar mano de obra general primero si existe
     if 'general' in st.session_state['categorias'] and st.session_state['categorias']['general'].get('mano_obra', 0) > 0:
         mano_obra_general = st.session_state['categorias']['general']['mano_obra']
         total_general += mano_obra_general
@@ -369,9 +342,8 @@ def show_resumen(items_data: Dict[str, Any]) -> None:
         with st.container(border=True):
             st.subheader(f"**Mano de obra general:** ${mano_obra_general:,}")
 
-    # Mostrar categorías con items o mano de obra
     for cat, data in st.session_state['categorias'].items():
-        if cat == 'general':  # Ya la mostramos arriba
+        if cat == 'general': 
             continue
             
         items = data['items']
