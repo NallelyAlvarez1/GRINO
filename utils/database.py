@@ -31,13 +31,31 @@ def check_login(username: str, password: str) -> Dict[str, Any]:
         conn.close()
 
 # ==================== FUNCIONES DE CLIENTES ====================
-def get_clientes() -> List[Tuple[int, str]]:
+def get_clientes(user_id: Optional[int] = None) -> List[Dict[str, Any]]:
     """Obtiene todos los clientes (id, nombre)"""
     conn = get_db()
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT id, nombre FROM clientes ORDER BY nombre")
-            return cur.fetchall()
+            if user_id:
+                cur.execute("""
+                    SELECT id, nombre, fecha_registro, creado_por 
+                    FROM clientes 
+                    WHERE creado_por = %s 
+                    ORDER BY nombre
+                """, (user_id,))
+            else:
+                cur.execute("""
+                    SELECT id, nombre, fecha_registro, creado_por 
+                    FROM clientes 
+                    ORDER BY nombre
+                """)
+            
+            return [{
+                'id': row[0],
+                'nombre': row[1],
+                'fecha_registro': row[2],
+                'creado_por': row[3]
+            } for row in cur.fetchall()]
     finally:
         conn.close()
 
@@ -57,6 +75,54 @@ def create_cliente(nombre: str, user_id: int) -> Optional[int]:
         print(f"Error al crear cliente: {e}")
         conn.rollback()
         return None
+    finally:
+        conn.close()
+
+def update_cliente(cliente_id: int, nombre: str, user_id: int) -> bool:
+    """
+    Actualiza los datos de un cliente existente
+    """
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            # Verificar que el cliente pertenece al usuario antes de editar
+            cur.execute("""
+                UPDATE clientes 
+                SET nombre = %s 
+                WHERE id = %s AND creado_por = %s
+            """, (nombre, cliente_id, user_id))
+            conn.commit()
+            return cur.rowcount > 0
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        conn.close()
+
+def delete_cliente(cliente_id: int, user_id: int) -> bool:
+    """
+    Elimina un cliente de la base de datos
+    
+    Args:
+        cliente_id: ID del cliente a eliminar
+        user_id: ID del usuario que realiza la eliminación
+    
+    Returns:
+        True si la eliminación fue exitosa, False si no
+    """
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            # Verificar que el cliente pertenece al usuario antes de eliminar
+            cur.execute("""
+                DELETE FROM clientes 
+                WHERE id = %s AND creado_por = %s
+            """, (cliente_id, user_id))
+            conn.commit()
+            return cur.rowcount > 0
+    except Exception as e:
+        conn.rollback()
+        raise e
     finally:
         conn.close()
 
