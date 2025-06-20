@@ -1,7 +1,7 @@
 import streamlit as st
 import psycopg2
 import pandas as pd
-from typing import Any, Dict, List, Tuple, Optional
+from typing import Any, Dict, List, Tuple, Optional, Union
 from utils.database import (
     create_categoria, 
     get_categorias, 
@@ -56,7 +56,7 @@ def show_cliente_lugar_selector() -> Tuple[int, str, int, str]:
     return cliente_id, cliente_nombre, lugar_id, lugar_nombre
 
 def _selector_entidad(
-    datos: List[Tuple[int, str]],
+    datos: Union[List[Tuple], List[Dict]],
     label: str,
     key: str,
     btn_nuevo: str,
@@ -64,17 +64,22 @@ def _selector_entidad(
     placeholder_nombre: str,
     funcion_creacion: callable
 ) -> Optional[int]:
-    """Componente para seleccionar/crear entidades"""
-    nombres_por_id = {d[0]: d[1] for d in datos}
-    options = [None] + [d[0] for d in datos] if datos else [None]
-
+    """Componente genérico para seleccionar/crear entidades"""
+    
+    if datos and isinstance(datos[0], dict):
+        nombres_por_id = {d['id']: d['nombre'] for d in datos}
+        options = [None] + [d['id'] for d in datos] if datos else [None]
+    else:
+        nombres_por_id = {d[0]: d[1] for d in datos}
+        options = [None] + [d[0] for d in datos] if datos else [None]
+    
     seleccionado = st.selectbox(
         label,
         options=options,
         format_func=lambda id: "--- Seleccione ---" if id is None else nombres_por_id.get(id, "Desconocido"),
         key=f"select_{key}"
     )
-
+    
     popover = st.popover(btn_nuevo, use_container_width=True)
     with popover:
         nombre = st.text_input(placeholder_nombre, key=f"input_nuevo_{key}")

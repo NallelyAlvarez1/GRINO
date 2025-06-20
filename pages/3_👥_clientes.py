@@ -1,5 +1,5 @@
 import streamlit as st
-from utils.database import get_clientes, create_cliente, update_cliente, delete_cliente
+from utils.database import get_clientes_detallados, create_cliente, update_cliente, delete_cliente
 from utils.auth import require_login
 import pandas as pd
 from datetime import datetime
@@ -82,7 +82,7 @@ def main():
     
     # Obtener clientes del usuario actual
     try:
-        clientes = get_clientes(st.session_state.user_id)
+        clientes = get_clientes_detallados(st.session_state.user_id)
     except Exception as e:
         st.error(f"Error al cargar clientes: {str(e)}")
         st.stop()

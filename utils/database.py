@@ -31,8 +31,20 @@ def check_login(username: str, password: str) -> Dict[str, Any]:
         conn.close()
 
 # ==================== FUNCIONES DE CLIENTES ====================
-def get_clientes(user_id: Optional[int] = None) -> List[Dict[str, Any]]:
-    """Obtiene todos los clientes (id, nombre)"""
+def get_clientes() -> List[Tuple[int, str]]:
+    """Obtiene todos los clientes - para presupuesto"""
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id, nombre FROM clientes ORDER BY nombre")
+            return cur.fetchall()
+    finally:
+        conn.close()
+
+def get_clientes_detallados(user_id: Optional[int] = None) -> List[Dict[str, Any]]:
+    """
+    Obtiene clientes con más detalles - gestión de clientes
+    """
     conn = get_db()
     try:
         with conn.cursor() as cur:
