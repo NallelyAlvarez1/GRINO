@@ -17,8 +17,6 @@ if 'usuario' not in st.session_state:
 # Determinar si el usuario está logueado
 is_logged_in = check_login()
 
-# El bloque if __name__ == "__main__": no es necesario en Streamlit
-
 # --- 2. CONTENIDO PROTEGIDO (USUARIO LOGUEADO) ---
 if is_logged_in:
     # Obtener el cliente de Supabase (cacheado)
@@ -140,7 +138,7 @@ else:
     with tabs[1]:
         st.markdown("##### Crear una Cuenta")
         with st.form("register_form"):
-            email_reg = st.text_input("Correo electrónico para registro", key="reg_email")
+            email_reg = st.text_input("Correo electrónico para registro", key="reg_email", placeholder_nombre="email")
             password_reg = st.text_input("Contraseña (mínimo 6 caracteres)", type="password", key="reg_password")
             password_confirm = st.text_input("Confirmar Contraseña", type="password", key="reg_confirm")
             
@@ -152,6 +150,6 @@ else:
                 elif len(password_reg) < 6:
                     st.error("La contraseña debe tener al menos 6 caracteres.")
                 elif register_user(email_reg, password_reg): 
-                    st.success("Usuario registrado. Por favor, inicie sesión.")
+                    st.success("Usuario registrado. Por favor, confirme su Gmail e inicie sesión.")
                 else:
                     st.error("Error al registrar el usuario. El correo puede estar ya en uso o el formato es inválido.")
