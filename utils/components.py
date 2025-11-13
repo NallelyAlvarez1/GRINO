@@ -1,5 +1,4 @@
 import streamlit as st
-import psycopg2
 import pandas as pd
 from typing import Any, Dict, List, Tuple, Optional, Union
 from utils.database import (
@@ -8,8 +7,7 @@ from utils.database import (
     get_clientes, 
     create_cliente, 
     get_lugares_trabajo, 
-    create_lugar_trabajo,
-    contar_items_presupuesto
+    create_lugar_trabajo
 )
 
 # ==================== SECCION CLIENTE - LUGAR DE TRABAJO ====================
@@ -19,24 +17,25 @@ def show_cliente_lugar_selector() -> Tuple[int, str, int, str]:
         st.stop()
 
     try:
-        clientes = get_clientes()
+        clientes = st.session_state.get("cliente_data", get_clientes())
         lugares = get_lugares_trabajo()
     except Exception as e:
         st.error(f"Error cargando datos: {e}")
         st.stop()
 
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
 
     with col1:
         st.markdown("#### Cliente")
         cliente_id = _selector_entidad(
             datos=clientes,
-            label="Seleccionar cliente",
+            label="cliente",
             key="cliente",
             btn_nuevo="➕ Nuevo cliente",
             modal_title="Nuevo Cliente",
             placeholder_nombre="Nombre de cliente",
-            funcion_creacion=create_cliente
+            funcion_creacion=create_cliente,
+            label_visibility="collapsed" 
         )
         cliente_nombre = next((n for i, n in clientes if i == cliente_id), "Desconocido")
 
@@ -44,16 +43,27 @@ def show_cliente_lugar_selector() -> Tuple[int, str, int, str]:
         st.markdown("#### Lugar de Trabajo")
         lugar_id = _selector_entidad(
             datos=lugares,
-            label="Seleccionar lugar",
+            label="lugares",
             key="lugar",
             btn_nuevo="➕ Nuevo lugar",
             modal_title="Nuevo Lugar",
             placeholder_nombre="Nombre del lugar",
-            funcion_creacion=create_lugar_trabajo
+            funcion_creacion=create_lugar_trabajo,
+            label_visibility="collapsed" 
         )
         lugar_nombre = next((n for i, n in lugares if i == lugar_id), "Desconocido")
+    
+    with col3:
+        st.markdown("#### Trabajo a realizar")
+        st.session_state.descripcion = st.text_input(
+            "Descripción del trabajo",
+            placeholder="Ejemplo: Instalación de sistema de riego en jardín delantero...",
+            key="descripcion_input",
+            value=st.session_state.get("descripcion", ""),
+            label_visibility="collapsed"
+        )
 
-    return cliente_id, cliente_nombre, lugar_id, lugar_nombre
+    return cliente_id, cliente_nombre, lugar_id, lugar_nombre,  st.session_state.descripcion
 
 def _selector_entidad(
     datos: Union[List[Tuple], List[Dict]],
@@ -62,127 +72,101 @@ def _selector_entidad(
     btn_nuevo: str,
     modal_title: str,
     placeholder_nombre: str,
-    funcion_creacion: callable
+    funcion_creacion: callable,
+    label_visibility: str = "visible"  # ✅ PARÁMETRO NUEVO
 ) -> Optional[int]:
-    """Componente genérico para seleccionar/crear entidades"""
+    """Componente seleccionar/crear entidades"""
     
-    if datos and isinstance(datos[0], dict):
-        nombres_por_id = {d['id']: d['nombre'] for d in datos}
-        options = [None] + [d['id'] for d in datos] if datos else [None]
+    # Inicializar estado
+    if f"{key}_data" not in st.session_state:
+        st.session_state[f"{key}_data"] = datos
+    
+    # Usar datos actualizados
+    current_data = st.session_state[f"{key}_data"]
+    
+    # Convertir datos a formato consistente
+    if current_data and isinstance(current_data[0], dict):
+        nombres_por_id = {d['id']: d['nombre'] for d in current_data}
+        options = [None] + [d['id'] for d in current_data]
     else:
-        nombres_por_id = {d[0]: d[1] for d in datos}
-        options = [None] + [d[0] for d in datos] if datos else [None]
+        nombres_por_id = {d[0]: d[1] for d in current_data}
+        options = [None] + [d[0] for d in current_data]
     
+    # Selector principal
     seleccionado = st.selectbox(
         label,
         options=options,
         format_func=lambda id: "--- Seleccione ---" if id is None else nombres_por_id.get(id, "Desconocido"),
-        key=f"select_{key}"
+        key=f"select_{key}",
+        label_visibility="collapsed"  # ✅ USAR PARÁMETRO
     )
     
-    popover = st.popover(btn_nuevo, use_container_width=True)
+    # Popover para crear nuevo
+    popover = st.popover(btn_nuevo, width="stretch")
     with popover:
         nombre = st.text_input(placeholder_nombre, key=f"input_nuevo_{key}")
         
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("💾 Guardar", key=f"btn_guardar_{key}", type="primary"):
-                if not nombre.strip():
-                    st.warning("Nombre requerido")
-                elif any(n.lower() == nombre.lower() for _, n in datos):
-                    st.error(f"Ya existe un {key} con ese nombre")
-                else:
-                    try:
-                        nuevo_id = funcion_creacion(nombre.strip(), st.session_state.user_id)
-                        st.session_state[f"{key}_actual"] = nuevo_id
-                    except Exception as e:
-                        st.error(f"Error al crear: {e}")
-        
-        with col2:
-            if st.button("✖️ Cancelar", key=f"btn_cancelar_{key}"):
-                st.rerun()
+        if st.button("💾 Guardar", key=f"btn_guardar_{key}", type="primary"):
+            if not nombre.strip():
+                st.warning("Nombre requerido")
+            elif any(n.lower() == nombre.lower() for n in nombres_por_id.values()):
+                st.error(f"Ya existe un {key} con ese nombre")
+            else:
+                try:
+                    # Crear nuevo elemento en la base de datos
+                    nuevo_id = funcion_creacion(nombre.strip(), st.session_state.user_id)
+                    
+                    # Actualizar los datos en session_state
+                    if current_data and isinstance(current_data[0], dict):
+                        nuevo_item = {'id': nuevo_id, 'nombre': nombre.strip()}
+                        st.session_state[f"{key}_data"] = current_data + [nuevo_item]
+                    else:
+                        nuevo_item = (nuevo_id, nombre.strip())
+                        st.session_state[f"{key}_data"] = current_data + [nuevo_item]
+                    
+                    # Forzar rerun
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"Error al crear: {e}")
 
-    return st.session_state.get(f"{key}_actual", seleccionado)
+    return seleccionado
 
 # ========== SECCIÓN CATEGORIA - ITEMS ==========
-def selector_categoria(
-    mostrar_label: bool = True, 
-    requerido: bool = True, 
-    key_suffix: str = ""
-) -> Tuple[Optional[int], Optional[str]]:
-    """
-    Selector de categorías con capacidad para crear nuevas
-    """
+def selector_categoria(mostrar_label: bool = True, requerido: bool = True, key_suffix: str = "") -> Tuple[Optional[int], Optional[str]]:
+    """Selector de categorías con capacidad para crear nuevas (usando _selector_entidad)"""
     if 'user_id' not in st.session_state:
         st.error("❌ No autenticado")
         st.stop()
 
     try:
-        categorias = get_categorias()
-        nombres_por_id = {d[0]: d[1] for d in categorias}
-        
-        select_key = f"select_categoria_{key_suffix}"
-        btn_key = f"btn_nueva_categoria_{key_suffix}"
-        input_key = f"input_nueva_categoria_{key_suffix}"
-        
-
-        if mostrar_label:
-            st.markdown("#### Categoría")
-        
-        if categorias:
-            opciones = [(cat[0], cat[1]) for cat in categorias]
-            
-            categoria_id = st.selectbox(
-                "Seleccionar categoría",
-                options=[op[0] for op in opciones],
-                format_func=lambda id: nombres_por_id.get(id, "Desconocido"),
-                key=select_key,
-                label_visibility="collapsed" if not mostrar_label else "visible"
-            )
-            categoria_nombre = nombres_por_id.get(categoria_id, "")
-        else:
-            categoria_id = None
-            st.info("No hay categorías registradas")
-        btn_nuevo = st.button("➕ Agregar Categoria", key=btn_key, use_container_width=True)
-
-        if btn_nuevo:
-            with st.form(key=f"form_nueva_categoria_{key_suffix}", border=True):
-                nuevo_nombre = st.text_input("Nombre de la nueva categoría:", key=input_key)
-                
-                cols = st.columns(2)
-                with cols[0]:
-                    if st.form_submit_button("💾 Guardar", type="primary"):
-                        if not nuevo_nombre.strip():
-                            st.error("Nombre requerido")
-                        elif any(n.lower() == nuevo_nombre.lower() for _, n in categorias):
-                            st.error("¡Esta categoría ya existe!")
-                        else:
-                            try:
-                                nuevo_id = create_categoria(nuevo_nombre.strip(), st.session_state.user_id)
-                                st.session_state[f"categoria_actual_{key_suffix}"] = nuevo_id
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Error al crear categoría: {e}")
-                
-                with cols[1]:
-                    if st.form_submit_button("✖️ Cancelar"):
-                        pass
-
-        categoria_id = st.session_state.get(f"categoria_actual_{key_suffix}", categoria_id)
-        categoria_nombre = nombres_por_id.get(categoria_id, 
-                                           nuevo_nombre if btn_nuevo and not categoria_id else "")
-        
-        if requerido and not categoria_id:
-            st.warning("Por favor selecciona o crea una categoría")
-            st.stop()
-            
-        return categoria_id, categoria_nombre
-            
+        categorias = st.session_state.get(f"categorias_data_{key_suffix}", get_categorias())
     except Exception as e:
-        st.error(f"Error al cargar categorías: {e}")
+        st.error(f"Error cargando categorías: {e}")
         if requerido:
             st.stop()
         return None, None
+
+    if mostrar_label:
+        st.markdown("#### Categoría")
+
+    categoria_id = _selector_entidad(
+        datos=categorias,
+        label="Seleccionar categoría",
+        key=f"categoria_{key_suffix}",
+        btn_nuevo="➕ Nueva categoría",
+        modal_title="Nueva Categoría",
+        placeholder_nombre="Nombre de la categoría",
+        funcion_creacion=create_categoria
+    )
+
+    categoria_nombre = next((n for i, n in categorias if i == categoria_id), "Desconocido")
+
+    if requerido and not categoria_id:
+        st.warning("Por favor selecciona o crea una categoría")
+        st.stop()
+
+    return categoria_id, categoria_nombre
 
 def show_items_presupuesto() -> Dict[str, Any]:
     if 'categorias' not in st.session_state:
@@ -212,7 +196,7 @@ def show_items_presupuesto() -> Dict[str, Any]:
 
             col1, col2, col3 = st.columns(3)
             with col1:
-                unidad = st.selectbox("Unidad:", ["m²", "m³", "Unidad", "Metro lineal", "Saco", "Metro"], key="unidad_principal")
+                unidad = st.selectbox("Unidad:", ["m²", "m³", "Unidad", "Metro lineal", "Saco", "Metro", "Caja", "Kilo (kg)", "Galón (gal)", "Litro", "Par/Juego", "Plancha"], key="unidad_principal")
             with col2:
                 total = cantidad * precio_unitario
                 st.text_input("Total", value=f"${total:,}", disabled=True)
@@ -233,6 +217,7 @@ def show_items_presupuesto() -> Dict[str, Any]:
                             item_existente['cantidad'] += cantidad
                             item_existente['total'] = item_existente['cantidad'] * item_existente['precio_unitario']
                             st.success("¡Cantidad actualizada!")
+                            st.badge("¡Cambios guardados!", icon=":material/check:", color="green")
                         else:
                             items_cat.append({
                                 'nombre': nombre_item,
@@ -241,7 +226,7 @@ def show_items_presupuesto() -> Dict[str, Any]:
                                 'precio_unitario': precio_unitario,
                                 'total': total
                             })
-                            st.success(f"Ítem agregado a '{categoria_nombre}'")
+                            st.badge(f"Ítem agregado a '{categoria_nombre}'", icon=":material/check:", color="green")
     
     # ========== SECCIÓN DE EDICIÓN ==========
     with st.expander("📝 Editar Items", expanded=False):
@@ -268,8 +253,8 @@ def show_items_presupuesto() -> Dict[str, Any]:
                     nuevo_nombre = st.text_input("Nombre", item['nombre'], 
                                               key=f"nombre_{cat}_{index}", label_visibility="collapsed")
                 with col2:
-                    nueva_unidad = st.selectbox("Unidad", ["m²", "m³", "Unidad", "Metro lineal", "Saco", "Metro"],
-                                              index=["m²", "m³", "Unidad", "Metro lineal", "Saco", "Metro"].index(item['unidad']),
+                    nueva_unidad = st.selectbox("Unidad", ["m²", "m³", "Unidad", "Metro lineal", "Saco", "Metro", "Caja", "Kilo (kg)", "Galón (gal)", "Litro", "Par/Juego", "Plancha"],
+                                              index=["m²", "m³", "Unidad", "Metro lineal", "Saco", "Metro", "Caja", "Kilo (kg)", "Galón (gal)", "Litro", "Par/Juego", "Plancha"].index(item['unidad']),
                                               key=f"unidad_{cat}_{index}", label_visibility="collapsed")
                 with col3:
                     nueva_cantidad = st.number_input("Cantidad", min_value=1, step=1, value=item['cantidad'],
@@ -291,13 +276,13 @@ def show_items_presupuesto() -> Dict[str, Any]:
                             'precio_unitario': nuevo_precio,
                             'total': nuevo_total
                         }
-                        st.success("¡Cambios guardados!")
+                        st.badge("¡Cambios guardados!", icon=":material/check:", color="green")
                         st.rerun()
 
                 with col7:
                     if st.button("❌", key=f"eliminar_{cat}_{index}"):
                         del st.session_state['categorias'][cat]['items'][index]
-                        st.success("¡Ítem eliminado!")
+                        st.badge("¡Ítem eliminado!", icon=":material/check:", color="green")
                         st.rerun()
     
     return st.session_state['categorias']
@@ -344,8 +329,7 @@ def show_resumen(items_data: Dict[str, Any]) -> None:
         mano_obra_general = st.session_state['categorias']['general']['mano_obra']
         total_general += mano_obra_general
         
-        with st.container(border=True):
-            st.subheader(f"**Mano de obra general:** ${mano_obra_general:,}")
+        st.subheader(f"**Mano de obra general:** ${mano_obra_general:,}")
 
     for cat, data in st.session_state['categorias'].items():
         if cat == 'general': 
@@ -358,26 +342,26 @@ def show_resumen(items_data: Dict[str, Any]) -> None:
             total_categoria = sum(item['total'] for item in items) + mano_obra
             total_general += total_categoria
 
-            with st.container(border=True):
-                st.markdown(f"**🔹 {cat}**")
-                
-                if items:
-                    df_items = pd.DataFrame(items)
-                    st.dataframe(
-                        df_items,
-                        column_config={
-                            "nombre": "Descripción",
-                            "unidad": "Unidad",
-                            "cantidad": "Cantidad",
-                            "precio_unitario": st.column_config.NumberColumn("P. Unitario", format="$%d"),
-                            "total": st.column_config.NumberColumn("Total", format="$%d")
-                        },
-                        hide_index=True,
-                        use_container_width=True
-                    )
-                
-                if mano_obra > 0:
-                    st.markdown(f"**Mano de obra {cat}:** ${mano_obra:,}")
-                    st.markdown(f"**Total {cat}:** ${total_categoria:,}")
+            st.markdown(f"**🔹 {cat}**")
+            
+            if items:
+                df_items = pd.DataFrame(items)
+                st.dataframe(
+                    df_items,
+                    column_config={
+                        "nombre": "Descripción",
+                        "unidad": "Unidad",
+                        "cantidad": "Cantidad",
+                        "precio_unitario": st.column_config.NumberColumn("P. Unitario", format="$%d"),
+                        "total": st.column_config.NumberColumn("Total", format="$%d")
+                    },
+                    hide_index=True,
+                    width="stretch"
+                )
+            
+            if mano_obra > 0:
+                st.markdown(f"**Mano de obra {cat}:** ${mano_obra:,}")
+            
+            st.markdown(f"**Total {cat}:** ${total_categoria:,}")
                 
     st.markdown(f"#### 💵 Total General: ${total_general:,}")

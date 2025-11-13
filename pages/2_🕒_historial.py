@@ -1,16 +1,104 @@
 import streamlit as st
+
 from utils.database import (
     get_presupuestos_usuario, 
     get_presupuesto_detallado,
     get_clientes,
-    get_lugares_trabajo
+    get_lugares_trabajo,
+    delete_presupuesto
 )
-from utils.auth import require_login
-from utils.pdf import mostrar_boton_descarga_pdf
+from utils.auth import check_login
+from utils.pdf import (
+    mostrar_boton_descarga_pdf
+)
 from datetime import datetime, timedelta
 import pandas as pd
+from typing import Dict, Any
 
-require_login()
+check_login()
+
+def _show_presupuesto_detail(presupuesto_id: int, cliente_nombre: str, lugar_nombre: str):
+    """Obtiene el detalle completo y lo muestra agrupado por categoría."""
+    detalle = get_presupuesto_detallado(presupuesto_id)
+    if not detalle:
+        st.error("No se pudo cargar el detalle del presupuesto.")
+        return
+
+    st.markdown(f"**Cliente:** {cliente_nombre} | **Lugar:** {lugar_nombre} | **Descripción:** {detalle.get('descripcion', 'N/A')}")
+      
+    total_general = 0
+    
+    # 1. Agrupar ítems por nombre de categoría
+    categorias_agrupadas = {}
+    for item in detalle.get('items', []):
+        cat = item.get('categoria', 'Sin Categoría') or 'Sin Categoría'
+        if cat not in categorias_agrupadas:
+            categorias_agrupadas[cat] = {'items': [], 'mano_obra': 0}
+        
+        # Lógica para separar Mano de Obra (asumiendo que tiene ese nombre)
+        if 'mano de obra' in item.get('nombre', '').lower():
+             # Sumamos al total de mano de obra
+            categorias_agrupadas[cat]['mano_obra'] += int(round(item.get('total', 0))) 
+        else:
+            categorias_agrupadas[cat]['items'].append(item)
+
+
+    # 2. Mostrar la vista previa agrupada por categoría
+    for cat, data in categorias_agrupadas.items():
+        items = data['items']
+        mano_obra = data.get('mano_obra', 0)
+        
+        if items or mano_obra > 0:
+            total_categoria = sum(int(round(item.get('total', 0))) for item in items) + mano_obra
+            total_general += total_categoria
+
+            st.markdown(f"**🔹 {cat}**")
+            
+            if items:
+                df_items = pd.DataFrame(items)
+
+                for col in ['cantidad', 'precio_unitario', 'total']:
+                    df_items[col] = df_items[col].apply(lambda x: int(round(x)) if x is not None else 0) 
+
+                # Seleccionar y renombrar columnas para la visualización
+                df_display = df_items[[
+                    'nombre', 
+                    'unidad', 
+                    'cantidad', 
+                    'precio_unitario', 
+                    'total', 
+                    'notas'
+                ]].rename(columns={'nombre': 'Descripción', 'precio_unitario': 'P. Unitario'})
+                
+                st.dataframe(
+                    df_display,
+                    column_config={
+                        "P. Unitario": st.column_config.NumberColumn("P. Unitario", format="$%d"),
+                        "total": st.column_config.NumberColumn("Total", format="$%d"),
+                        "cantidad": st.column_config.NumberColumn("Cantidad", format="%d"),
+                        "notas": "Notas" 
+                    },
+                    hide_index=True,
+                    width='stretch'
+                )
+            
+            col_mo, col_total = st.columns([1, 1]) # Divide el espacio en dos columnas iguales
+
+            # Solo mostramos la Mano de Obra si es > 0
+            if mano_obra > 0:
+                with col_mo:
+                    # Usamos st.metric o st.markdown según tu preferencia de estilo
+                    st.markdown(f"**Mano de obra {cat}:** **${mano_obra:,.0f}**")
+
+            # El total de la categoría siempre se muestra
+            with col_total:
+                st.markdown(f"**Total {cat}:** **${total_categoria:,.0f}**") 
+                
+            st.divider()
+    st.markdown(f"#### 💵 **Total General del Presupuesto:** **${total_general:,.0f}**")
+
+
+
 
 def main():
     st.title("🕒 Historial de Presupuestos")
@@ -69,109 +157,90 @@ def main():
         return
     
     # Mostrar resumen estadístico
+    suma_total = sum(int(round(p['total'])) for p in presupuestos)
     total_presupuestos = len(presupuestos)
-    suma_total = sum(p['total'] for p in presupuestos)
-    avg_total = suma_total / total_presupuestos if total_presupuestos > 0 else 0
+    avg_total = suma_total / total_presupuestos if total_presupuestos else 0
     
     st.metric("📊 Resumen", 
               f"{total_presupuestos} presupuestos", 
-              f"Total: ${suma_total:,.2f} | Promedio: ${avg_total:,.2f}")
+              f"Total: ${suma_total:,.0f} | Promedio: ${avg_total:,.0f}")
     
-    # Mostrar presupuestos en cuadrícula
     st.subheader("📋 Presupuestos Generados")
-    
-    cols = st.columns(3)  
-    
-    for i, p in enumerate(presupuestos):
-        with cols[i % 3]:
-            with st.container(border=True):
-                # Encabezado
-                st.markdown(f"### {p['cliente']['nombre']}")
-                st.caption(f"📅 {p['fecha'].strftime('%Y-%m-%d')}")
-                
-                # Detalles básicos
-                st.write(f"**Lugar:** {p['lugar']['nombre']}")
-                st.write(f"**Total:** ${p['total']:,.2f}")
-                st.write(f"**Items:** {p.get('num_items', 0)}")
-                
-                # Botones de acción
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.button("🔍 Detalles", key=f"det_{p['id']}"):
-                        st.session_state['presupuesto_detalle'] = p['id']
-                        st.rerun()
-                
-                with col2:
-                    try:
-                        pdf_html, success = mostrar_boton_descarga_pdf(p['id'])
-                        if success:
-                            st.markdown(pdf_html, unsafe_allow_html=True)
-                        else:
-                            st.error(pdf_html) 
-                    except Exception as e:
-                        st.error(f"Error inesperado al generar PDF: {str(e)}")
 
-    if 'presupuesto_detalle' in st.session_state:
-        st.divider()
-        st.subheader("📋 Detalles del Presupuesto")
-        
-        try:
-            detalle = get_presupuesto_detallado(st.session_state['presupuesto_detalle'])
-            if not detalle:
-                st.error("No se encontraron detalles del presupuesto")
-                del st.session_state['presupuesto_detalle']
-                st.rerun()
-            
-            if st.button("✖️ Cerrar detalles"):
-                del st.session_state['presupuesto_detalle']
-                st.rerun()
-            
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                st.markdown(f"**Cliente:** {detalle['cliente']['nombre']}")
-                st.markdown(f"**Lugar:** {detalle['lugar']['nombre']}")
-                st.markdown(f"**Fecha:** {detalle['fecha'].strftime('%Y-%m-%d %H:%M')}")
-            
-            with col2:
-                st.metric("Total", f"${detalle['total']:,.2f}")
-            
-            categorias = {}
-            for item in detalle['items']:
-                cat = item.get('categoria', 'Sin categoría') or 'Sin categoría'
-                if cat not in categorias:
-                    categorias[cat] = []
-                categorias[cat].append(item)
-            
-            for categoria, items in categorias.items():
-                with st.expander(f"📁 {categoria}", expanded=True):
-                    df = pd.DataFrame(items)
-                    df['P. Unitario'] = df['precio_unitario'].apply(lambda x: f"${x:,.2f}")
-                    df['Total'] = df['total'].apply(lambda x: f"${x:,.2f}")
-                    
-                    st.dataframe(
-                        df[['nombre', 'unidad', 'cantidad', 'P. Unitario', 'Total']],
-                        column_config={
-                            'nombre': 'Descripción',
-                            'unidad': 'Unidad',
-                            'cantidad': 'Cantidad'
-                        },
-                        hide_index=True,
-                        use_container_width=True
-                    )
-            
-            try:
-                pdf_html, success = mostrar_boton_descarga_pdf(detalle['id'])
-                if success:
-                    st.markdown(pdf_html, unsafe_allow_html=True)
-                else:
-                    st.error(pdf_html) 
-            except Exception as e:
-                st.error(f"Error inesperado al generar PDF: {str(e)}")
+    # Encabezado tipo tabla
+    with st.container():
+        col1, col2, col3, col4, col5, col6 = st.columns([2, 2, 2, 2, 1, 3])
+        col1.markdown("**Cliente**")
+        col2.markdown("**Lugar**")
+        col3.markdown("**Fecha**")
+        col4.markdown("**Total**")
+        col5.markdown("**Ítems**")
+        col6.markdown("**Acciones**")
+
+    # Filas tipo tabla
+    for p in presupuestos:
+        with st.container(border=True):
+            col1, col2, col3, col4, col5, col6 = st.columns([2, 2, 2, 2, 1, 3])
+
+            # Datos
+            col1.write(p['cliente']['nombre'].title())
+            col2.write(p['lugar']['nombre'].title())
+            col3.write(p['fecha'].strftime('%Y-%m-%d'))
+            col4.write(f"**${p['total']:,.2f}**")
+            col5.write(str(p.get('num_items', 0)))
+
+            # Acciones
+            with col6:
+                # El nuevo set de 4 columnas
+                b1, b2, b3, b4 = st.columns([1, 1, 1, 1])
                 
-        except Exception as e:
-            st.error(f"Error al cargar detalles: {str(e)}")
-            del st.session_state['presupuesto_detalle']
-            st.rerun()
+                # Clave de estado para el toggle del expander
+                state_key = f"expander_toggle_{p['id']}"
+                if state_key not in st.session_state:
+                    st.session_state[state_key] = False
+
+                with b1: # BOTÓN EDITAR
+                    if st.button("✏️", key=f"edit_{p['id']}", help="Editar"):
+                        st.session_state['presupuesto_a_editar_id'] = p['id'] 
+                        st.switch_page("pages/_✏️ Editar.py")
+
+                with b2: # BOTÓN DESCARGA
+                    try:
+                        pdf_bytes, file_name, success = mostrar_boton_descarga_pdf(p['id'])
+                        if success:
+                            st.download_button(
+                                label="⬇️",
+                                data=pdf_bytes,
+                                file_name=file_name,
+                                mime="application/pdf",
+                                key=f"down_{p['id']}",
+                                help="Descargar PDF"
+                            )
+                    except:
+                        pass
+                
+                with b3: # BOTÓN VISTA PREVIA (TOGGLE EXPANDER)
+                    # El botón toggles el estado
+                    if st.button("📑", key=f"view_{p['id']}", help="Ver Presupuesto"):
+                        st.session_state[state_key] = not st.session_state[state_key]
+                        st.rerun() # Necesario para abrir/cerrar inmediatamente
+
+                with b4: # BOTÓN ELIMINAR
+                    if st.button("🗑️", key=f"del_{p['id']}", help="Eliminar"):
+                        if delete_presupuesto(p['id'], st.session_state.user_id):
+                            st.success("Presupuesto eliminado correctamente")
+                            st.rerun()
+                        else:
+                            st.error("No se pudo eliminar el presupuesto")
+            
+            # LÓGICA DEL EXPANDER (Fuera de las columnas, dentro del contenedor de la fila)
+            if st.session_state.get(state_key, False):
+                with st.expander(f"Detalle Presupuesto ID: {p['id']}", expanded=True):
+                    _show_presupuesto_detail(
+                        presupuesto_id=p['id'],
+                        cliente_nombre=p['cliente']['nombre'],
+                        lugar_nombre=p['lugar']['nombre']
+                    )
 
 if __name__ == "__main__":
     if 'user_id' in st.session_state and st.session_state.user_id:

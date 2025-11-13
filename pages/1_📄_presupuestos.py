@@ -1,6 +1,7 @@
 from typing import Any, Dict
 import streamlit as st
-from datetime import datetime
+from utils.pdf import generar_pdf
+from utils.auth import check_login
 from utils.components import (
     show_cliente_lugar_selector,
     show_items_presupuesto,
@@ -11,7 +12,9 @@ from utils.database import (
     create_presupuesto,
     save_presupuesto_completo
 )
-from utils.pdf import generar_pdf
+
+
+check_login()
 
 def calcular_total(items_data: Dict[str, Any]) -> float:
     """Calcula el total general del presupuesto"""
@@ -32,16 +35,12 @@ def main():
         st.page_link("App_principal.py", label="Volver al inicio")
         st.stop()
 
+    # ========== SECCIÓN CLIENTE, LUGAR y TRABAJO A REALIZAR ==========
     st.subheader("Datos del Cliente", divider="blue")
-    with st.status("Selección de cliente y lugar", expanded=True) as status:
-        cliente_id, cliente_nombre, lugar_id, lugar_nombre = show_cliente_lugar_selector()
-        if cliente_id and lugar_id:
-            status.update(label="✅ Completado", state="complete", expanded=False)
+    cliente_id, cliente_nombre, lugar_id, lugar_nombre, descripcion= show_cliente_lugar_selector()
+    st.session_state.descripcion = descripcion
 
-    if not (cliente_id and lugar_id):
-        st.stop()
-
-    # Paso 2: Agregar items
+   # ========== SECCIÓN ITEMS ==========
     st.subheader("Datos del Presupuesto", divider="blue")
     items_data = show_items_presupuesto()
 
@@ -49,18 +48,16 @@ def main():
         st.warning("⚠️ Agrega al menos un ítem al presupuesto")
         st.stop()
 
-    # Paso 3: Mano de obra
+    # ========== SECCIÓN MANO DE OBRA ==========
     st.subheader("🛠️ Mano de obra", divider="blue")
     show_mano_obra(items_data)
 
-    # Paso 4: Resumen
+    # ========== SECCIÓN RESUMEN ==========
     st.subheader("🧮 Vista previa", divider="blue")
     show_resumen(items_data)
 
-    # Campo para descripción/notas
-    descripcion = st.text_area("Descripción / Notas del presupuesto:", height=100)
-
-    # Paso 5: Guardar
+    # ========== GUARDADO ==========
+    
     if st.button("📂 Guardar Presupuesto Completo", type="primary",
                 help="Revise todos los datos antes de guardar"):
 
@@ -71,24 +68,23 @@ def main():
                 
                 # Crear presupuesto
                 presupuesto_id = create_presupuesto(
-                    cliente_id=cliente_id,
-                    lugar_id=lugar_id,
-                    descripcion=descripcion,
-                    total=total,
-                    user_id=st.session_state.user_id
+                cliente_id=cliente_id,
+                lugar_id=lugar_id,
+                descripcion=descripcion,
+                total=total,
+                user_id=st.session_state.user_id
                 )
 
                 if not presupuesto_id:
                     st.error("Error al crear el presupuesto")
                     st.stop()
-
-                # Guardar items
+    
                 if not save_presupuesto_completo(presupuesto_id, items_data):
                     st.error("Error al guardar los items del presupuesto")
                     st.stop()
 
                 # Generar PDF
-                pdf_path = generar_pdf(cliente_nombre, items_data, lugar_nombre)
+                pdf_path = generar_pdf(cliente_nombre, items_data, lugar_nombre, descripcion=descripcion)
                 
                 # Mostrar éxito y opciones
                 st.toast(f"Presupuesto #{presupuesto_id} guardado!", icon="✅")
@@ -109,7 +105,6 @@ def main():
                 cols = st.columns(3)
                 with cols[0]:
                     if st.button("🔄 Crear otro presupuesto"):
-                        # Limpiar solo los datos del presupuesto, mantener sesión
                         if 'categorias' in st.session_state:
                             del st.session_state['categorias']
                         st.rerun()

@@ -2,6 +2,7 @@ import bcrypt
 import streamlit as st
 from utils.database import get_db
 
+
 def hash_password(password: str) -> str:
     """Genera hash seguro con bcrypt"""
     salt = bcrypt.gensalt()
@@ -14,13 +15,6 @@ def verify_password(input_password: str, hashed_password: str) -> bool:
 def check_login():
     """Verifica si el usuario está logueado (para App_principal.py)"""
     return 'usuario' in st.session_state and st.session_state.usuario
-
-def require_login():
-    """Requerir login (para páginas protegidas)"""
-    if not check_login():
-        st.warning("🔒 Por favor inicia sesión")
-        st.switch_page("App_principal.py")
-        st.stop()
 
 def authenticate(username: str, password: str) -> bool:
     """Autentica credenciales contra la DB y guarda el user_id"""

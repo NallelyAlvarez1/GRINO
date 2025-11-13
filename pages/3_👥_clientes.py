@@ -1,10 +1,12 @@
 import streamlit as st
 from utils.database import get_clientes_detallados, create_cliente, update_cliente, delete_cliente
-from utils.auth import require_login
+from utils.auth import check_login
 import pandas as pd
 from datetime import datetime
 
-require_login()
+
+
+check_login()
 
 def mostrar_formulario_cliente(cliente_id=None, datos_actuales=None):
     """Muestra formulario para crear/editar cliente"""
@@ -130,11 +132,11 @@ def main():
                 # Botones de acción
                 col1, col2 = st.columns(2)
                 with col1:
-                    if st.button("✏️ Editar", key=f"edit_{cliente['id']}", use_container_width=True):
+                    if st.button("✏️.Editar", key=f"edit_{cliente['id']}", use_container_width=True):
                         st.session_state['editar_cliente'] = cliente['id']
                 
                 with col2:
-                    if st.button("🗑️ Eliminar", key=f"del_{cliente['id']}", use_container_width=True):
+                    if st.button("🗑️.Eliminar", key=f"del_{cliente['id']}", use_container_width=True):
                         st.session_state['eliminar_cliente'] = cliente['id']
     
     # Mostrar modal de edición si está activo
