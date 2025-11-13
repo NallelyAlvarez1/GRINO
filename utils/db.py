@@ -28,7 +28,7 @@ def test_supabase_connection(supabase_client: Client) -> bool:
     try:
         # Intenta seleccionar los primeros 0 registros de una tabla existente.
         # Esto verifica la conexión y las credenciales sin transferir muchos datos.
-        response = supabase_client.from_('nombre_de_una_tabla_existente').select('*').limit(0).execute()
+        response = supabase_client.from_('categorias').select('*').limit(0).execute()
         
         # Una conexión exitosa generalmente no lanzará una excepción y 
         # la respuesta contendrá datos de la tabla (aunque vacíos por el limit(0)).
