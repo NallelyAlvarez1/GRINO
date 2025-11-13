@@ -138,7 +138,7 @@ else:
     with tabs[1]:
         st.markdown("##### Crear una Cuenta")
         with st.form("register_form"):
-            email_reg = st.text_input("Correo electrónico para registro", key="reg_email", placeholder_nombre="email")
+            email_reg = st.text_input("Correo electrónico para registro", key="reg_email", placeholder="ejemplo@gmail.com")
             password_reg = st.text_input("Contraseña (mínimo 6 caracteres)", type="password", key="reg_password")
             password_confirm = st.text_input("Confirmar Contraseña", type="password", key="reg_confirm")
             
