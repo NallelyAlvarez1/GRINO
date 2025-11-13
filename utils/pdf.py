@@ -5,7 +5,6 @@ from typing import Optional, Tuple, Dict, Any
 from fpdf import FPDF
 from utils.database import get_presupuesto_detallado
 import locale
-import math
 import streamlit as st
 
 # ==================== UTILIDADES ====================
@@ -18,14 +17,19 @@ def safe_float_value(value: Any) -> float:
     except (TypeError, ValueError):
         return 0.0
 
-# Configuración de locale (se mantiene)
-try:
-    locale.setlocale(locale.LC_TIME, 'es_ES.utf8') 
-except locale.Error:
+LOCALES_A_PROBAR = ['es_ES.UTF-8', 'es_ES', 'es', 'es_ES.utf8']
+LOCALE_SET = False
+
+for loc in LOCALES_A_PROBAR:
     try:
-        locale.setlocale(locale.LC_TIME, 'es_ES')
+        locale.setlocale(locale.LC_TIME, loc)
+        LOCALE_SET = True
+        break
     except locale.Error:
-        locale.setlocale(locale.LC_TIME, 'es')
+        continue # Ignora el error y prueba el siguiente locale
+
+if not LOCALE_SET:
+    print("Advertencia: No se pudo configurar un locale en español. Las fechas en el PDF podrían salir en inglés.")
 
 # ========== FORMATO TEXTO ==========
 def formato_moneda(valor: float) -> str:
