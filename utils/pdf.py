@@ -1,12 +1,24 @@
 import tempfile
 import os
-import base64
 from datetime import datetime
 from typing import Optional, Tuple, Dict, Any
 from fpdf import FPDF
-from utils.database import get_presupuesto_detallado, delete_presupuesto
+from utils.database import get_presupuesto_detallado
 import locale
+import math
+import streamlit as st
 
+# ==================== UTILIDADES ====================
+def safe_float_value(value: Any) -> float:
+    """Convierte un valor a float de forma segura, manejando None, cadenas y errores de conversión."""
+    if value is None:
+        return 0.0
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+# Configuración de locale (se mantiene)
 try:
     locale.setlocale(locale.LC_TIME, 'es_ES.utf8') 
 except locale.Error:
@@ -18,7 +30,8 @@ except locale.Error:
 # ========== FORMATO TEXTO ==========
 def formato_moneda(valor: float) -> str:
     """Formatea valores monetarios con separadores de miles"""
-    return f"${valor:,.0f}".replace(",", ".")
+    # Usamos int(round(valor)) para trabajar con enteros y evitar problemas de visualización de decimales
+    return f"${int(round(valor)):,}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 # ==========  SECCION PDF ==========
 # Datos constantes
@@ -27,299 +40,218 @@ CONTACTO_NOMBRE = "Jhonny Nicolas Alvarez"
 CONTACTO_TELEFONO = "+569 6904 2513"
 CONTACTO_EMAIL = "jhonnynicolasalvarez@gmail.com"
 
+class PDF(FPDF):
+    """Clase PDF personalizada para incluir encabezado y pie de página."""
+    def header(self):
+        self.set_font('Arial', 'B', 12)
+        # Nombre de la Empresa
+        self.cell(0, 5, EMPRESA, 0, 1, 'C') 
+        self.set_font('Arial', '', 9)
+        # Datos de contacto
+        self.cell(0, 5, f"Contacto: {CONTACTO_NOMBRE} | Teléfono: {CONTACTO_TELEFONO} | Email: {CONTACTO_EMAIL}", 0, 1, 'C')
+        self.ln(5)
+
+    def footer(self):
+        self.set_y(-15)
+        self.set_font('Arial', 'I', 8)
+        self.cell(0, 10, 'Página %s de {nb}' % self.page_no(), 0, 0, 'C')
+
 def generar_pdf(cliente_nombre: str, categorias: Dict[str, Any], lugar_cliente: str, descripcion: Optional[str] = None) -> str:
     """
     Genera un archivo PDF con los datos del presupuesto
     """
     try:
-        pdf = FPDF()
+        # Inicializar PDF
+        pdf = PDF()
+        pdf.alias_nb_pages()
         pdf.add_page()
-        pdf.set_font("helvetica", size=11)
-        
-        # Configurar márgenes
-        pdf.set_margins(left=10, top=10, right=10)
         pdf.set_auto_page_break(auto=True, margin=15)
-
-        # Encabezado
-        COLOR_FONDO = (157, 178, 111)
-        pdf.set_fill_color(*COLOR_FONDO)
-
-        ALTO_FRANJA = 26
-        MARGEN_X = 10
-
-        # 1. Crear la franja de fondo verde
-        y_inicio_fondo = pdf.get_y()
-        pdf.set_xy(0, y_inicio_fondo)
-        pdf.set_fill_color(175, 192, 138)
-        pdf.cell(pdf.w, ALTO_FRANJA, "", border=0, ln=1, fill=True)
-
-        # 2. Texto sobre la franja
-        pdf.set_text_color(36, 36, 36)
-
-        # a)"Presupuesto"
-        pdf.set_y(y_inicio_fondo + 5)
-        pdf.set_x(MARGEN_X)
-        pdf.set_font("helvetica", style='B', size=24)
-        pdf.cell(100, 10, "Presupuesto", border=0, ln=0, align='L', fill=False)
-
-        # b)Nombre de la Empresa
-        pdf.set_x(MARGEN_X)
-        pdf.set_font("helvetica", style='', size=18)
-        pdf.cell(102, 26, EMPRESA.title(), border=0, ln=0, align='L', fill=False)
-
-        # c)Línea negra debajo del nombre de la empresa
-        y_linea = pdf.get_y() + 17
-        pdf.set_draw_color(56, 56, 56)
-        pdf.set_line_width(0.8)
-        pdf.line(MARGEN_X, y_linea, MARGEN_X + 85, y_linea)
-
-        # d)Línea verde debajo franja verde
-        y_linea = pdf.get_y() + 23 
-        pdf.set_draw_color(175, 192, 138)
-        pdf.set_line_width(0.8)
-        pdf.line(0, y_linea, pdf.w, y_linea)
-
-        # e) Lugar del cliente
-        pdf.set_font("helvetica", style='B', size=22)
-        pdf.set_y(y_inicio_fondo + (ALTO_FRANJA / 2) - 6)
-
-        ANCHO_UTIL_PAGINA = 190 
-        MARGEN_DERECHO = 10 
-        ANCHO_MULTICELL = 90
-        POSICION_X_INICIO = ANCHO_UTIL_PAGINA - ANCHO_MULTICELL + MARGEN_DERECHO
-
-        pdf.set_x(POSICION_X_INICIO) 
-        pdf.multi_cell(
-            w=ANCHO_MULTICELL, 
-            h=7,
-            txt=lugar_cliente.title(), 
-            border=0, 
-            align='C', 
-            fill=False
-        )
-
-        # añadir espacio antes de continuar
-        pdf.ln(15) 
-
-        # Fecha y datos de contacto
-        fecha_actual = datetime.now().strftime("%d %B, %Y")
+        
+        # Título del Presupuesto
+        pdf.set_font('Arial', 'B', 16)
+        pdf.cell(0, 10, 'PRESUPUESTO DE TRABAJO', 0, 1, 'L')
         pdf.ln(2)
-        pdf.set_font("helvetica", size=12)
 
-        # --- Columna izquierda: datos de contacto ---
-        x_inicio = pdf.get_x()
-        y_inicio = pdf.get_y()
-
-        pdf.cell(95, 5, CONTACTO_NOMBRE, border=0, ln=True)
-        pdf.cell(95, 5, CONTACTO_TELEFONO, border=0, ln=True)
-        pdf.cell(95, 5, CONTACTO_EMAIL, border=0, ln=True)
-
-        # Guardamos la altura final de la columna izquierda
-        y_fin_contacto = pdf.get_y()
-
-        # --- Línea vertical divisoria ---
-        pdf.set_draw_color(56, 56, 56)
-        pdf.set_line_width(0.6)
-        x_linea = x_inicio + 80
-        pdf.line(x_linea, y_inicio, x_linea, y_fin_contacto)
-
-        # --- Columna derecha: Cliente y fecha ---
-        pdf.set_xy(x_linea + 5, y_inicio)
-
-        # Cliente 
-        pdf.set_font("helvetica", style='B', size=10)
-        pdf.cell(40, 5, "Cliente:", border=0)
-
-        # Fecha
-        pdf.set_font("helvetica", size=12)
-        pdf.cell(0, 5, fecha_actual, border=0, ln=True, align='R')
-
-        # Nombre del cliente 
-        pdf.set_x(x_linea + 5)
-        pdf.set_font("helvetica", size=12)
-        pdf.cell(0, 6, cliente_nombre.title(), border=0, ln=True)
-
-        # 1. Crear la franja 2 de fondo verde
-        y_inicio_fondo = pdf.get_y()
-        MARGEN_X_FRANJA = 10
-        ALTO = 7
-
-        pdf.set_xy(MARGEN_X_FRANJA, y_inicio_fondo + 10)
-        pdf.set_fill_color(175, 192, 138)
-        pdf.cell(pdf.w - 2 * MARGEN_X_FRANJA, ALTO, "", border=0, ln=1, fill=True)
-
-        # --- Texto dentro de la franja ---
-        pdf.set_text_color(36, 36, 36)
-        pdf.set_font("helvetica", style='B', size=12)
-
-        # Centrar verticalmente el texto dentro de la franja
-        pdf.set_y(y_inicio_fondo + (ALTO / 2) + 7) 
-        pdf.set_x(MARGEN_X_FRANJA + 5)
+        # Información del Cliente y Trabajo
+        pdf.set_font('Arial', '', 10)
+        pdf.set_fill_color(240, 240, 240)
+        pdf.cell(50, 6, 'Cliente:', 1, 0, 'L', 1)
+        pdf.cell(0, 6, cliente_nombre, 1, 1, 'L', 0)
+        
+        pdf.cell(50, 6, 'Lugar de Trabajo:', 1, 0, 'L', 1)
+        pdf.cell(0, 6, lugar_cliente, 1, 1, 'L', 0)
+        
+        pdf.cell(50, 6, 'Fecha:', 1, 0, 'L', 1)
+        pdf.cell(0, 6, datetime.now().strftime('%d de %B de %Y'), 1, 1, 'L', 0)
         
         if descripcion:
-            texto_franja = descripcion.strip().capitalize()
-        else:
-            texto_franja = "Trabajo a Realizar" 
+            pdf.cell(50, 6, 'Trabajo a Realizar:', 1, 0, 'L', 1)
+            pdf.multi_cell(0, 6, descripcion, 1, 'L', 0)
+            
+        pdf.ln(5)
 
-        pdf.cell(0, 6, texto_franja, border=0, ln=1, align='C')
+        total_general_pdf = 0.0
 
-        pdf.ln(3)
-
-        # Presupuesto por categoría
-        total_general = 0
-        for categoria, data in categorias.items():
-            items = data.get('items', [])
-            mano_obra = data.get('mano_obra', 0)
-        
-            if mano_obra > 0:
-                items.append({
-                    'nombre': 'Mano de Obra',
-                    'unidad': 'Unidad', 
-                    'cantidad': 1,
-                    'precio_unitario': mano_obra,
-                    'total': mano_obra,
-                    'descripcion': 'Mano de obra'
-                })
-
-            # Filtrar categorías vacías
-            if not items:
+        # Iterar sobre las categorías (items_data es el diccionario de categorías)
+        for cat_nombre, data in categorias.items():
+            
+            # --- Mano de Obra General ---
+            if cat_nombre == 'general':
+                mano_obra_general = safe_float_value(data.get('mano_obra', 0))
+                if mano_obra_general > 0:
+                    pdf.set_font('Arial', 'B', 12)
+                    pdf.set_fill_color(220, 220, 255)
+                    pdf.cell(0, 7, 'MANO DE OBRA GENERAL', 1, 1, 'L', 1)
+                    
+                    pdf.set_font('Arial', '', 10)
+                    pdf.cell(160, 6, 'Costo de Mano de Obra para el trabajo completo (Global)', 1, 0, 'L')
+                    pdf.cell(0, 6, formato_moneda(mano_obra_general), 1, 1, 'R')
+                    total_general_pdf += mano_obra_general
+                    pdf.ln(3)
                 continue
                 
-            # Verificar si necesitamos nueva página antes de agregar una categoría
-            if pdf.get_y() > 270:
-                pdf.add_page()
-                pdf.set_y(10)
+            # --- Categorías con Ítems y/o Mano de Obra ---
+            items = data.get('items', [])
+            mano_obra_cat = safe_float_value(data.get('mano_obra', 0))
             
-            pdf.set_line_width(0.2)
-            pdf.set_font("helvetica", style='B', size=12)
-            texto = f"{categoria.title()}"
-            pdf.cell(200, 6, texto, ln=True)
+            if not items and mano_obra_cat == 0:
+                continue
 
-            pdf.set_draw_color(194, 207, 165)
-            pdf.set_line_width(0.8)
-            margen_izquierdo = 10
-            ancho_total = 190
-            y_linea = pdf.get_y() + 0.2
-            pdf.line(margen_izquierdo, y_linea, margen_izquierdo + ancho_total, y_linea)
-            pdf.ln(2) 
+            pdf.set_font('Arial', 'B', 12)
+            pdf.set_fill_color(220, 220, 220)
+            pdf.cell(0, 7, f'CATEGORÍA: {cat_nombre.upper()}', 1, 1, 'L', 1)
+
+            # Encabezados de la tabla de ítems
+            pdf.set_font('Arial', 'B', 9)
+            pdf.cell(70, 6, 'Descripción', 1, 0, 'L', 1)
+            pdf.cell(20, 6, 'Unidad', 1, 0, 'C', 1)
+            pdf.cell(20, 6, 'Cant.', 1, 0, 'C', 1)
+            pdf.cell(30, 6, 'P. Unitario', 1, 0, 'R', 1)
+            pdf.cell(30, 6, 'Total', 1, 1, 'R', 1)
+
+            total_categoria = 0.0
+            pdf.set_font('Arial', '', 9)
             
-            pdf.set_font("helvetica", style='B', size=11)
-            pdf.set_line_width(0.2)
-            pdf.set_draw_color(56, 56, 56)
-            pdf.cell(75, 6, "Insumo", border='B')
-            pdf.cell(25, 6, "Unidad", border='B', align='C')
-            pdf.cell(20, 6, "Cantidad", border='B', align='C')
-            pdf.cell(35, 6, "Precio Unitario", border='B', align='C')
-            pdf.cell(35, 6, "Total", border='B', ln=True, align='C')
-
-            total_categoria = 0
+            # Detalle de ítems
             for item in items:
-                # Verificar si necesitamos nueva página antes de agregar un item
-                if pdf.get_y() > 270:
-                    pdf.add_page()
-                    # Redibujar encabezados de tabla en nueva página
-                    pdf.set_font("helvetica", style='B', size=11)
-                    pdf.cell(75, 6, "Insumo", border='B')
-                    pdf.cell(25, 6, "Unidad", border='B', align='C')
-                    pdf.cell(20, 6, "Cantidad", border='B', align='C')
-                    pdf.cell(35, 6, "Precio Unitario", border='B', align='C')
-                    pdf.cell(35, 6, "Total", border='B', ln=True, align='C')
-                
-                pdf.set_font("helvetica", size=11)
-                
-                # VERIFICAR SI ES MANO DE OBRA
-                if item.get('descripcion') == 'Mano de obra':
-                    # Formato especial para mano de obra: solo nombre y total
-                    pdf.cell(155, 6, item.get('nombre', '').title(), border=1)
-                    pdf.cell(35, 6, formato_moneda(item.get('total', 0)), border=1, ln=True)
-                else:
-                    # Items normales con todas las columnas
-                    pdf.cell(75, 6, item.get('nombre', '').title(), border=1)
-                    pdf.cell(25, 6, item.get('unidad', '').title(), border=1)
-                    pdf.cell(20, 6, str(int(item.get('cantidad', 0))), border=1)
-                    pdf.cell(35, 6, formato_moneda(item.get('precio_unitario', 0)), border=1)
-                    pdf.cell(35, 6, formato_moneda(item.get('total', 0)), border=1, ln=True)
-                
-                total_categoria += item.get('total', 0)
+                nombre = item.get('nombre', 'Item')
+                unidad = item.get('unidad', 'Unidad')
+                cantidad = safe_float_value(item.get('cantidad', 0))
+                precio_unitario = safe_float_value(item.get('precio_unitario', 0))
+                total_item = safe_float_value(item.get('total', 0))
+                notas = item.get('descripcion', '') # El campo en utils.pdf original era 'descripcion'
 
-            pdf.set_font("helvetica", style='B', size=11)
-            pdf.cell(155, 6, "Total", border=1)
-            pdf.cell(35, 6, formato_moneda(total_categoria), border=1, ln=True)
+                total_categoria += total_item
+                
+                # Fila principal (Nombre y datos numéricos)
+                # Ancho: 70 (Nombre) + 20 (Unidad) + 20 (Cant) + 30 (P.U.) + 30 (Total) = 170
+
+                # Guardar posición Y para el multicell
+                y_start = pdf.get_y()
+                
+                # 1. Nombre (MultiCell)
+                pdf.multi_cell(70, 5, nombre, 0, 'L', 0, 0, '', y_start) 
+
+                # 2. Datos numéricos (Saltamos el espacio de 70)
+                pdf.set_xy(pdf.get_x() + 70, y_start)
+                pdf.cell(20, 5, unidad, 0, 0, 'C')
+                pdf.cell(20, 5, str(cantidad), 0, 0, 'C')
+                pdf.cell(30, 5, formato_moneda(precio_unitario), 0, 0, 'R')
+                pdf.cell(30, 5, formato_moneda(total_item), 0, 1, 'R')
+                
+                # 3. Notas (Si existen)
+                if notas:
+                    pdf.set_x(10) # Volver al margen izquierdo
+                    pdf.set_font('Arial', 'I', 8)
+                    pdf.cell(0, 4, f'Nota: {notas}', 0, 1, 'L')
+                    pdf.set_font('Arial', '', 9)
+                
+                pdf.cell(0, 1, '', 'T', 1, 'L') # Separador de línea
+
+            # Detalle Mano de Obra por Categoría
+            if mano_obra_cat > 0:
+                pdf.set_font('Arial', '', 10)
+                pdf.cell(100, 6, f'Mano de Obra para {cat_nombre}', 1, 0, 'L')
+                pdf.cell(60, 6, '', 1, 0, 'C') # Celda vacía
+                pdf.cell(30, 6, formato_moneda(mano_obra_cat), 1, 1, 'R')
+                total_categoria += mano_obra_cat
+                
+            # Total de la Categoría
+            pdf.set_font('Arial', 'B', 10)
+            pdf.cell(160, 6, f'TOTAL {cat_nombre.upper()}', 1, 0, 'R', 1)
+            pdf.cell(30, 6, formato_moneda(total_categoria), 1, 1, 'R', 1)
             pdf.ln(5)
-            total_general += total_categoria
+            
+            total_general_pdf += total_categoria
 
-        # Verificar si hay espacio suficiente para el cuadro del total
-        if pdf.get_y() > 270:
-            pdf.add_page()
-        
-        # Total general
-        pdf.set_fill_color(194, 207, 165)
-        ANCHO_TOTAL = 40
-        ALTO_TOTAL = 15
-        margen_derecho = 10
-        x_inicial = pdf.w - ANCHO_TOTAL - margen_derecho
-        y_inicial = pdf.get_y()
-
-        # Dibuja el rectángulo verde
-        pdf.rect(x_inicial, y_inicial, ANCHO_TOTAL, ALTO_TOTAL, style='F')
-
-        # Texto "Total"
-        pdf.set_xy(x_inicial + 4, y_inicial + 2)
-        pdf.set_font("helvetica", style='B', size=11)
-        pdf.set_text_color(36, 36, 36)
-        pdf.cell(0, 5, "Total", border=0)
-
-        # Monto
-        pdf.set_font("helvetica", style='B', size=14)
-        pdf.set_text_color(56, 56, 56)
-        pdf.set_xy(x_inicial, y_inicial + 6)
-        pdf.cell(ANCHO_TOTAL, 8, formato_moneda(total_general), border=0, align='C')
-
-        # Salto de línea después del cuadro
-        pdf.ln(ALTO_TOTAL + 2)
+        # TOTAL GENERAL
+        pdf.set_font('Arial', 'B', 14)
+        pdf.set_fill_color(180, 255, 180) # Verde claro
+        pdf.cell(160, 10, 'TOTAL PRESUPUESTO', 1, 0, 'R', 1)
+        pdf.cell(30, 10, formato_moneda(total_general_pdf), 1, 1, 'R', 1)
 
         # Guardar en archivo temporal
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-        temp_path = temp_file.name
-        temp_file.close()
-        pdf.output(temp_path)
-        
-        return temp_path
-        
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
+            pdf.output(tmp.name)
+            return tmp.name
+
     except Exception as e:
-        raise Exception(f"Error al generar PDF: {str(e)}")
-    
-def mostrar_boton_descarga_pdf(presupuesto_id: int) -> Tuple[bytes, str, bool]:
+        print(f"Error generando PDF: {e}")
+        st.error(f"Error en generación de PDF: {e}")
+        return "" # Devolver cadena vacía si falla
+
+def mostrar_boton_descarga_pdf(presupuesto_id: int) -> Tuple[Optional[bytes], Optional[str], bool]:
     """
-    Genera y devuelve los bytes de un PDF y el nombre de archivo sugerido
+    Obtiene el detalle del presupuesto, genera el PDF y devuelve los bytes y el nombre.
     """
     try:
-        # Obtener datos del presupuesto
         presupuesto = get_presupuesto_detallado(presupuesto_id)
         if not presupuesto:
-            return None, "", False
-        
-        # Procesar items por categoría
+            return None, None, False
+            
+        # 1. Reestructurar los ítems por categoría para el generador de PDF
         categorias = {}
+        total_general_mo = 0.0 # Usado solo para MO General si no está en un ítem
+        
         for item in presupuesto.get('items', []):
-            cat_nombre = item.get('categoria') or 'Sin categoría'
+            cat_nombre = item.get('categoria', 'Sin Categoría') or 'Sin Categoría'
+            
+            # --- MANEJO DE VALORES NUMÉRICOS SEGURO ---
+            total_item = safe_float_value(item.get('total'))
+            precio_unitario = safe_float_value(item.get('precio_unitario'))
+            
+            # Inicializar la categoría si es la primera vez
             if cat_nombre not in categorias:
-                categorias[cat_nombre] = {'items': [], 'mano_obra': 0}
+                categorias[cat_nombre] = {'items': [], 'mano_obra': 0.0}
+
+            # Lógica para separar Mano de Obra General
+            if 'mano de obra general' in item.get('nombre', '').lower():
+                 # Si el ítem es Mano de Obra General, lo mapeamos a la categoría 'general' para el PDF
+                 categorias['general'] = {'items': [], 'mano_obra': precio_unitario}
+                 total_general_mo += precio_unitario # Sumamos el total de MO general
+                 continue
             
-            # 🔥 CORREGIR: Incluir mano de obra en la estructura
-            if item.get('nombre') == 'Mano de Obra':
-                categorias[cat_nombre]['mano_obra'] = item.get('precio_unitario', 0)
-            else:
-                categorias[cat_nombre]['items'].append({
-                    'nombre': item.get('nombre', 'Sin nombre'),
-                    'unidad': item.get('unidad', 'Unidad'),
-                    'cantidad': item.get('cantidad', 1),
-                    'precio_unitario': item.get('precio_unitario', 0),
-                    'total': item.get('total', 0),
-                    'descripcion': item.get('notas', '')  # 🔥 AGREGAR DESCRIPCIÓN
-                })
+            # Lógica para Mano de Obra por Categoría (asumiendo que tiene precio unitario pero no cantidad)
+            # Nota: Si el item tiene un nombre que indica MO, y no es MO General.
+            if 'mano de obra' in item.get('nombre', '').lower() and total_item > 0:
+                 categorias[cat_nombre]['mano_obra'] += total_item
+                 continue
+
+            # Item normal
+            categorias[cat_nombre]['items'].append({
+                'nombre': item.get('nombre', 'Sin nombre'),
+                'unidad': item.get('unidad', 'Unidad'),
+                'cantidad': safe_float_value(item.get('cantidad', 1)),
+                'precio_unitario': precio_unitario,
+                'total': total_item,
+                'descripcion': item.get('notas', '')  # Usamos 'notas' como descripción en el PDF
+            })
             
-        # Generar PDF
+        # Aseguramos que 'general' exista para la MO general
+        if 'general' not in categorias:
+            categorias['general'] = {'items': [], 'mano_obra': 0.0}
+            
+        # 2. Generar PDF
         pdf_path = generar_pdf(
             presupuesto['cliente']['nombre'],
             categorias,
@@ -327,23 +259,25 @@ def mostrar_boton_descarga_pdf(presupuesto_id: int) -> Tuple[bytes, str, bool]:
             descripcion=presupuesto.get('descripcion', ''),
         )
         
-        # Leer el PDF
+        if not pdf_path:
+            return None, None, False
+            
+        # 3. Leer el PDF
         with open(pdf_path, "rb") as f:
             pdf_bytes = f.read()
         
-        # Eliminar archivo temporal
+        # 4. Eliminar archivo temporal
         try:
             os.unlink(pdf_path)
         except Exception as e:
             print(f"Error al eliminar archivo temporal: {str(e)}")
         
-        # Nombre del archivo
-        lugar_nombre = presupuesto['lugar']['nombre'].strip().replace(" ", "_")
-        file_name = f"Presupuesto_{lugar_nombre}.pdf"
+        # 5. Nombre del archivo
+        lugar_nombre = presupuesto['lugar']['nombre'].strip().replace(" ", "_").replace("/", "_")
+        file_name = f"Presupuesto_{lugar_nombre}_{presupuesto_id}.pdf"
 
         return pdf_bytes, file_name, True
         
     except Exception as e:
-        error_msg = f"Error al generar PDF: {str(e)}"
-        print(error_msg)
-        return None, "", False
+        print(f"Error en mostrar_boton_descarga_pdf: {e}")
+        return None, None, False

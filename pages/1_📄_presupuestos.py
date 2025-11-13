@@ -1,107 +1,124 @@
 from typing import Any, Dict
 import streamlit as st
+import os # Necesario para eliminar archivo temporal
 from utils.pdf import generar_pdf
 from utils.auth import check_login
-from utils.components import (
-    show_cliente_lugar_selector,
-    show_items_presupuesto,
-    show_mano_obra,
-    show_resumen
+from utils.components import (\
+    show_cliente_lugar_selector,\
+    show_items_presupuesto,\
+    show_mano_obra,\
+    show_resumen,\
+    safe_numeric_value # Importamos la utilidad de safe_numeric
 )
-from utils.database import (
-    create_presupuesto,
+from utils.database import (\
     save_presupuesto_completo
 )
 
-
+# Ejecuta la comprobación de login al inicio
 check_login()
 
 def calcular_total(items_data: Dict[str, Any]) -> float:
-    """Calcula el total general del presupuesto"""
-    total = 0
+    """Calcula el total general del presupuesto, usando la utilidad de valores seguros."""
+    total = 0.0
     for categoria, data in items_data.items():
-        # Sumar items
-        total += sum(item['total'] for item in data['items'])
-        # Sumar mano de obra si existe
-        total += data.get('mano_obra', 0)
+        # Sumar items (usando safe_numeric_value)
+        total += sum(safe_numeric_value(item['total']) for item in data['items'])
+        # Sumar mano de obra (usando safe_numeric_value)
+        total += safe_numeric_value(data.get('mano_obra', 0.0))
     return total
 
 def main():
     st.title("📋 Generar Nuevo Presupuesto")
 
     # Verificar autenticación
-    if 'user_id' not in st.session_state:
+    if 'user_id' not in st.session_state or not st.session_state.user_id:
         st.error("🔐 Por favor inicie sesión primero")
         st.page_link("App_principal.py", label="Volver al inicio")
         st.stop()
 
     # ========== SECCIÓN CLIENTE, LUGAR y TRABAJO A REALIZAR ==========
     st.subheader("Datos del Cliente", divider="blue")
-    cliente_id, cliente_nombre, lugar_id, lugar_nombre, descripcion= show_cliente_lugar_selector()
-    st.session_state.descripcion = descripcion
+    cliente_id, cliente_nombre, lugar_id, lugar_nombre, descripcion = show_cliente_lugar_selector()
 
-   # ========== SECCIÓN ITEMS ==========
-    st.subheader("Datos del Presupuesto", divider="blue")
-    items_data = show_items_presupuesto()
-
-    if not items_data or all(len(cat['items']) == 0 for cat in items_data.values()):
-        st.warning("⚠️ Agrega al menos un ítem al presupuesto")
-        st.stop()
-
-    # ========== SECCIÓN MANO DE OBRA ==========
-    st.subheader("🛠️ Mano de obra", divider="blue")
-    show_mano_obra(items_data)
-
-    # ========== SECCIÓN RESUMEN ==========
-    st.subheader("🧮 Vista previa", divider="blue")
-    show_resumen(items_data)
-
-    # ========== GUARDADO ==========
+    # Inicialización segura de la estructura de categorías si no existe
+    if 'categorias' not in st.session_state:
+        st.session_state['categorias'] = {'general': {'items': [], 'mano_obra': 0.0}}
+        
+    # ========== SECCIÓN ITEMS Y MANO DE OBRA ==========
+    show_items_presupuesto()
+    show_mano_obra()
     
-    if st.button("📂 Guardar Presupuesto Completo", type="primary",
-                help="Revise todos los datos antes de guardar"):
-
-        with st.spinner("Guardando presupuesto..."):
+    # ========== SECCIÓN RESUMEN Y ACCIÓN ==========
+    total_general = calcular_total(st.session_state.get('categorias', {}))
+    st.markdown("---")
+    
+    if total_general > 0:
+        resumen_total_display = show_resumen() # Muestra el resumen
+    else:
+        st.info("El presupuesto actual está vacío.")
+        resumen_total_display = 0.0
+    
+    st.markdown("---")
+    
+    # Botón de Guardar
+    if st.button("💾 Guardar y Generar Presupuesto", type="primary", use_container_width=True):
+        # 1. Validación
+        if not cliente_id or not lugar_id:
+            st.error("⚠️ Por favor, seleccione un Cliente y un Lugar de Trabajo.")
+        elif total_general <= 0:
+            st.error("⚠️ El total del presupuesto debe ser mayor a cero.")
+        else:
             try:
-                # Calcular total
-                total = calcular_total(items_data)
-                
-                # Crear presupuesto
-                presupuesto_id = create_presupuesto(
-                cliente_id=cliente_id,
-                lugar_id=lugar_id,
-                descripcion=descripcion,
-                total=total,
-                user_id=st.session_state.user_id
+                # 2. Guardar en Supabase
+                presupuesto_id = save_presupuesto_completo(
+                    user_id=st.session_state.user_id,
+                    cliente_id=cliente_id,
+                    lugar_id=lugar_id,
+                    descripcion=descripcion,
+                    items_data=st.session_state['categorias'],
+                    total_general=total_general
                 )
 
                 if not presupuesto_id:
-                    st.error("Error al crear el presupuesto")
-                    st.stop()
-    
-                if not save_presupuesto_completo(presupuesto_id, items_data):
-                    st.error("Error al guardar los items del presupuesto")
+                    st.error("❌ Error al guardar el presupuesto en la base de datos.")
                     st.stop()
 
-                # Generar PDF
+                # 3. Preparar la estructura de categorías para el PDF (usa la misma estructura)
+                items_data = st.session_state['categorias']
+
+                # 4. Generar PDF (generar_pdf devuelve el path del archivo temporal)
+                # Nota: generar_pdf ahora maneja mejor la estructura de items_data
                 pdf_path = generar_pdf(cliente_nombre, items_data, lugar_nombre, descripcion=descripcion)
                 
-                # Mostrar éxito y opciones
+                if not pdf_path:
+                    st.error("❌ Falló la generación del archivo PDF.")
+                    st.stop()
+                    
+                # 5. Mostrar éxito y opciones
                 st.toast(f"Presupuesto #{presupuesto_id} guardado!", icon="✅")
-                st.success("""
-                Presupuesto guardado correctamente. 
-                ¿Qué deseas hacer ahora?
-                """)
+                st.success(f"Presupuesto guardado correctamente (ID: {presupuesto_id}).")
 
-                # Botón para descargar PDF
+                # 6. Botón para descargar PDF
                 with open(pdf_path, "rb") as f:
+                    # Formatear nombre del archivo
+                    lugar_nombre_limpio = lugar_nombre.strip().replace(" ", "_").replace("/", "_")
+                    file_name = f"Presupuesto_{lugar_nombre_limpio}_{presupuesto_id}.pdf"
+                    
                     st.download_button(
                         "📄 Descargar PDF", 
                         f, 
-                        file_name=f"presupuesto_{presupuesto_id}.pdf", 
-                        mime="application/pdf"
+                        file_name=file_name, 
+                        mime="application/pdf",
+                        use_container_width=True
                     )
+                
+                # 7. Eliminar archivo temporal después de la descarga
+                try:
+                    os.unlink(pdf_path)
+                except Exception as e:
+                    print(f"Advertencia: No se pudo eliminar el archivo temporal PDF: {e}")
 
+                # 8. Opciones de navegación
                 cols = st.columns(3)
                 with cols[0]:
                     if st.button("🔄 Crear otro presupuesto"):

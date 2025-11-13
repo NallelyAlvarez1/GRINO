@@ -1,468 +1,409 @@
-import psycopg2
-from dotenv import load_dotenv
-import os
-import bcrypt
-import uuid
 from typing import List, Tuple, Optional, Dict, Any
+import uuid
+import streamlit as st
+from supabase import Client # Importamos para tipado
+from datetime import datetime, timedelta
 
-load_dotenv()
+# 1. Importar la conexión Supabase (Asumiendo que get_supabase_client está en utils/db)
+try:
+    from utils.db import get_supabase_client
+except ImportError:
+    st.error("Error: Falta el archivo 'utils/db.py' con la función get_supabase_client.")
+    st.stop()
 
-# ==================== FUNCIONES DE AUTENTICACIÓN ====================
-def get_db():
-    return psycopg2.connect(
-        host=os.getenv("DB_HOST"),
-        database=os.getenv("DB_NAME"),
-        user=os.getenv("DB_USER"),
-        password=os.getenv("DB_PASSWORD")
-    )
+# Conexión global para el módulo
+supabase: Client = get_supabase_client()
+
+
+# ==================== UTILIDADES ====================
+
+def _get_entidad_por_id(tabla: str, entity_id: int) -> Optional[Dict[str, Any]]:
+    """Función genérica para obtener una entidad por su ID."""
+    try:
+        response = supabase.table(tabla).select("*").eq("id", entity_id).limit(1).execute()
+        if response.data:
+            return response.data[0]
+        return None
+    except Exception as e:
+        print(f"Error al obtener entidad {tabla} ID {entity_id}: {e}")
+        return None
 
 # ==================== FUNCIONES DE CLIENTES ====================
+
 def get_clientes() -> List[Tuple[int, str]]:
-    """Obtiene todos los clientes - para presupuesto"""
-    conn = get_db()
+    """Obtiene todos los clientes (id, nombre) - para selectores."""
     try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT id, nombre FROM clientes ORDER BY nombre")
-            return cur.fetchall()
-    finally:
-        conn.close()
+        # Se obtiene el campo 'id' como integer y 'nombre' como string
+        response = supabase.table("clientes").select("id, nombre").order("nombre").execute()
+        # Mapear la lista de diccionarios a la lista de tuplas esperada
+        return [(d['id'], d['nombre']) for d in response.data]
+    except Exception as e:
+        print(f"Error al obtener clientes: {e}")
+        return []
 
-def get_clientes_detallados(user_id: Optional[int] = None) -> List[Dict[str, Any]]:
-    """
-    Obtiene clientes con más detalles - gestión de clientes
-    """
-    conn = get_db()
+def get_clientes_detallados(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Obtiene todos los clientes con detalles, filtrados opcionalmente por user_id."""
     try:
-        with conn.cursor() as cur:
-            if user_id:
-                cur.execute("""
-                    SELECT id, nombre, fecha_registro, creado_por 
-                    FROM clientes 
-                    WHERE creado_por = %s 
-                    ORDER BY nombre
-                """, (user_id,))
-            else:
-                cur.execute("""
-                    SELECT id, nombre, fecha_registro, creado_por 
-                    FROM clientes 
-                    ORDER BY nombre
-                """)
+        query = supabase.table("clientes").select("*, users!inner(email)").order("nombre")
+        if user_id:
+            # Filtramos por el campo 'creado_por', que debe ser el UUID de Supabase Auth
+            query = query.eq("creado_por", user_id)
             
-            return [{
-                'id': row[0],
-                'nombre': row[1],
-                'fecha_registro': row[2],
-                'creado_por': row[3]
-            } for row in cur.fetchall()]
-    finally:
-        conn.close()
+        response = query.execute()
+        
+        # Mapeamos los datos para la presentación
+        data = []
+        for d in response.data:
+            # Aseguramos que la fecha existe y es un objeto datetime
+            fecha_creacion = d.get('fecha_creacion')
+            if fecha_creacion and isinstance(fecha_creacion, str):
+                try:
+                    fecha_creacion = datetime.fromisoformat(fecha_creacion.replace('Z', '+00:00'))
+                except ValueError:
+                    fecha_creacion = None
+                    
+            data.append({
+                'id': d['id'],
+                'nombre': d['nombre'],
+                'fecha_creacion': fecha_creacion.strftime('%Y-%m-%d %H:%M:%S') if fecha_creacion else 'N/A',
+                # Los datos de la tabla 'users' vienen anidados.
+                'creado_por': d.get('users', {}).get('email', 'Desconocido'), 
+                'user_id': d.get('creado_por', 'N/A')
+            })
+        return data
+    except Exception as e:
+        print(f"Error al obtener clientes detallados: {e}")
+        return []
 
-def create_cliente(nombre: str, user_id: int) -> Optional[int]:
-    """Crea un nuevo cliente con alias único"""
-    alias = f"{nombre.lower().replace(' ', '-')}-{str(uuid.uuid4())[:4]}"
-    conn = get_db()
+def create_cliente(nombre: str, user_id: str) -> Optional[int]:
+    """Crea un nuevo cliente. user_id es string (UUID)."""
     try:
-        with conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO clientes (nombre, alias, creado_por) VALUES (%s, %s, %s) RETURNING id",
-                (nombre, alias, user_id)
-            )
-            conn.commit()
-            return cur.fetchone()[0]
+        response = supabase.table("clientes").insert({
+            "nombre": nombre,
+            "creado_por": user_id # Usamos el UUID del usuario de Supabase Auth
+        }).execute()
+        # Supabase devuelve los datos del registro insertado, necesitamos el ID.
+        return response.data[0]['id'] if response.data else None
     except Exception as e:
         print(f"Error al crear cliente: {e}")
-        conn.rollback()
         return None
-    finally:
-        conn.close()
 
-def update_cliente(cliente_id: int, nombre: str, user_id: int) -> bool:
-    """
-    Actualiza los datos de un cliente existente
-    """
-    conn = get_db()
+def update_cliente(cliente_id: int, nombre: str, user_id: str) -> bool:
+    """Actualiza un cliente existente."""
     try:
-        with conn.cursor() as cur:
-            # Verificar que el cliente pertenece al usuario antes de editar
-            cur.execute("""
-                UPDATE clientes 
-                SET nombre = %s 
-                WHERE id = %s AND creado_por = %s
-            """, (nombre, cliente_id, user_id))
-            conn.commit()
-            return cur.rowcount > 0
+        # Añadimos .eq('creado_por', user_id) para seguridad a nivel de aplicación (RLS se encarga de esto en Supabase)
+        response = supabase.table("clientes").update({
+            "nombre": nombre
+        }).eq("id", cliente_id).eq("creado_por", user_id).execute()
+        return len(response.data) > 0
     except Exception as e:
-        conn.rollback()
-        raise e
-    finally:
-        conn.close()
+        print(f"Error al actualizar cliente: {e}")
+        return False
 
-def delete_cliente(cliente_id: int, user_id: int) -> bool:
-    """
-    Elimina un cliente de la base de datos
-    
-    Args:
-        cliente_id: ID del cliente a eliminar
-        user_id: ID del usuario que realiza la eliminación
-    
-    Returns:
-        True si la eliminación fue exitosa, False si no
-    """
-    conn = get_db()
+def delete_cliente(cliente_id: int, user_id: str) -> bool:
+    """Elimina un cliente."""
     try:
-        with conn.cursor() as cur:
-            # Verificar que el cliente pertenece al usuario antes de eliminar
-            cur.execute("""
-                DELETE FROM clientes 
-                WHERE id = %s AND creado_por = %s
-            """, (cliente_id, user_id))
-            conn.commit()
-            return cur.rowcount > 0
+        response = supabase.table("clientes").delete().eq("id", cliente_id).eq("creado_por", user_id).execute()
+        return len(response.data) > 0
     except Exception as e:
-        conn.rollback()
-        raise e
-    finally:
-        conn.close()
+        print(f"Error al eliminar cliente: {e}")
+        return False
+
 
 # ==================== FUNCIONES DE LUGARES DE TRABAJO ====================
-def get_lugares_trabajo() -> List[Tuple[int, str]]:
-    """Obtiene todos los lugares de trabajo (id, nombre)"""
-    conn = get_db()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT id, nombre FROM lugares_trabajo ORDER BY nombre")
-            return cur.fetchall()
-    finally:
-        conn.close()
 
-def create_lugar_trabajo(nombre: str, user_id: int) -> Optional[int]:
-    """Crea un nuevo lugar de trabajo"""
-    conn = get_db()
+def get_lugares_trabajo() -> List[Tuple[int, str]]:
+    """Obtiene todos los lugares de trabajo (id, nombre)."""
     try:
-        with conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO lugares_trabajo (nombre, creado_por) VALUES (%s, %s) RETURNING id",
-                (nombre, user_id)
-            )
-            conn.commit()
-            return cur.fetchone()[0]
+        response = supabase.table("lugares_trabajo").select("id, nombre").order("nombre").execute()
+        return [(d['id'], d['nombre']) for d in response.data]
+    except Exception as e:
+        print(f"Error al obtener lugares de trabajo: {e}")
+        return []
+
+def create_lugar_trabajo(nombre: str, user_id: str) -> Optional[int]:
+    """Crea un nuevo lugar de trabajo. user_id es string (UUID)."""
+    try:
+        response = supabase.table("lugares_trabajo").insert({
+            "nombre": nombre,
+            "creado_por": user_id
+        }).execute()
+        return response.data[0]['id'] if response.data else None
     except Exception as e:
         print(f"Error al crear lugar de trabajo: {e}")
-        conn.rollback()
         return None
-    finally:
-        conn.close()
 
-# ==================== FUNCIONES PARA PRESUPUESTOS ====================
-def create_presupuesto(cliente_id: int, lugar_id: int, descripcion: str, total: float, user_id: int) -> Optional[int]:
-    """Crea un nuevo presupuesto y retorna su ID"""
-    conn = get_db()
+
+# ==================== FUNCIONES DE PRESUPUESTOS ====================
+
+def save_presupuesto_completo(user_id: str, cliente_id: int, lugar_id: int, descripcion: str, items_data: Dict[str, Any], total_general: float) -> Optional[int]:
+    """
+    Guarda el presupuesto principal y sus ítems.
+    Regresa el ID del presupuesto creado.
+    """
     try:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO presupuestos 
-                (cliente_id, lugar_trabajo_id, fecha_creacion, descripcion, total, creado_por)
-                VALUES (%s, %s, CURRENT_TIMESTAMP, %s, %s, %s) 
-                RETURNING id
-                """,
-                (cliente_id, lugar_id, descripcion, total, user_id)
-            )
-            presupuesto_id = cur.fetchone()[0]
-            conn.commit()
-            return presupuesto_id
-    except Exception as e:
-        print(f"Error al crear presupuesto: {e}")
-        conn.rollback()
-        return None
-    finally:
-        conn.close()
-
-def get_presupuesto_detallado(presupuesto_id: int) -> Optional[Dict[str, Any]]:
-    """Obtiene todos los datos de un presupuesto específico incluyendo items"""
-    conn = get_db()
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                """SELECT p.id, p.fecha_creacion, p.total, p.notas, p.descripcion,
-                    c.id AS cliente_id, c.nombre AS cliente_nombre,
-                    l.id AS lugar_id, l.nombre AS lugar_nombre
-                FROM presupuestos p
-                JOIN clientes c ON p.cliente_id = c.id
-                JOIN lugares_trabajo l ON p.lugar_trabajo_id = l.id
-                WHERE p.id = %s""",
-                (presupuesto_id,)
-            )
-
-            presupuesto = cur.fetchone()
-            if not presupuesto:
-                return None
-
-            cur.execute(
-                """SELECT i.nombre_personalizado, i.unidad, i.cantidad, 
-                      i.precio_unitario, i.total, i.notas,
-                      cat.nombre AS categoria,
-                      i.categoria_id AS categoria_id
-                   FROM items_en_presupuesto i
-                   LEFT JOIN categorias cat ON i.categoria_id = cat.id
-                   WHERE i.presupuesto_id = %s""",
-                (presupuesto_id,)
-            )
-            items = cur.fetchall()
-
-            return {
-                'id': presupuesto[0],
-                'fecha': presupuesto[1],
-                'total': presupuesto[2],
-                'notas': presupuesto[3],
-                'descripcion': presupuesto[4],
-                'cliente': {'id': presupuesto[5], 'nombre': presupuesto[6]},
-                'lugar': {'id': presupuesto[7], 'nombre': presupuesto[8]},
-                'items': [{
-                    'nombre': item[0],
-                    'unidad': item[1],
-                    'cantidad': item[2],
-                    'precio_unitario': item[3],
-                    'total': item[4],
-                    'notas': item[5],
-                    'categoria': item[6],
-                    'categoria_id': item[7]
-                } for item in items]
-            }
-    finally:
-        conn.close()
-
-def get_presupuestos_usuario(user_id: int, filtros: Dict[str, Any] = None) -> List[Dict[str, Any]]:
-    """Obtiene presupuestos con filtros avanzados"""
-    conn = get_db()
-    try:
-        with conn.cursor() as cur:
-            base_query = """
-                SELECT p.id, p.fecha_creacion, p.total, p.notas,
-                       c.id AS cliente_id, c.nombre AS cliente_nombre,
-                       l.id AS lugar_id, l.nombre AS lugar_nombre
-                FROM presupuestos p
-                JOIN clientes c ON p.cliente_id = c.id
-                JOIN lugares_trabajo l ON p.lugar_trabajo_id = l.id
-                WHERE p.creado_por = %s
-            """
-            params = [user_id]
+        # 1. Guardar el presupuesto principal
+        # El campo 'total' debe ser float
+        presupuesto_data = {
+            "creado_por": user_id, 
+            "cliente_id": cliente_id,
+            "lugar_trabajo_id": lugar_id,
+            "descripcion": descripcion,
+            "total": float(total_general),
+            "num_items": sum(len(data['items']) for cat, data in items_data.items() if cat != 'general') + (1 if items_data['general'].get('mano_obra', 0) > 0 else 0)
+        }
+        
+        response = supabase.table("presupuestos").insert(presupuesto_data).execute()
+        nuevo_presupuesto_id = response.data[0]['id']
+        
+        # 2. Preparar los ítems para la inserción masiva
+        items_to_insert = []
+        for categoria, data in items_data.items():
+            # Añadir Mano de Obra General si existe
+            mano_obra_general = data.get('mano_obra', 0)
+            if categoria == 'general' and mano_obra_general > 0:
+                 items_to_insert.append({
+                    "presupuesto_id": nuevo_presupuesto_id,
+                    "nombre": "Mano de Obra General",
+                    "categoria": "General", # Se asume una categoría 'General' para la MO general
+                    "unidad": "Global",
+                    "cantidad": 1.0,
+                    "precio_unitario": float(mano_obra_general),
+                    "total": float(mano_obra_general),
+                    "notas": "Costo de mano de obra para el trabajo completo."
+                })
             
-            query_parts = [base_query]
-            
-            if filtros:
-                if filtros.get('cliente_id'):
-                    query_parts.append(" AND p.cliente_id = %s")
-                    params.append(filtros['cliente_id'])
-                
-                if filtros.get('lugar_id'):
-                    query_parts.append(" AND p.lugar_trabajo_id = %s")
-                    params.append(filtros['lugar_id'])
-                
-                if filtros.get('fecha_inicio'):
-                    query_parts.append(" AND p.fecha_creacion >= %s")
-                    params.append(filtros['fecha_inicio'])
-                
-                if filtros.get('fecha_fin'):
-                    query_parts.append(" AND p.fecha_creacion <= %s")
-                    params.append(filtros['fecha_fin'])
-                
-                if filtros.get('search'):
-                    search = f"%{filtros['search']}%"
-                    query_parts.append(" AND (c.nombre ILIKE %s OR l.nombre ILIKE %s OR p.notas ILIKE %s)")
-                    params.extend([search, search, search])
-            
-            query_parts.append(" ORDER BY p.fecha_creacion DESC")
-            
-            final_query = "".join(query_parts)
-            cur.execute(final_query, params)
-            
-            return [{
-                'id': row[0],
-                'fecha': row[1],
-                'total': row[2],
-                'notas': row[3],
-                'cliente': {'id': row[4], 'nombre': row[5]},
-                'lugar': {'id': row[6], 'nombre': row[7]},
-                'num_items': contar_items_presupuesto(row[0])
-            } for row in cur.fetchall()]
+            # Añadir ítems de categorías específicas
+            for item in data['items']:
+                # Asegurar que los valores numéricos son float
+                items_to_insert.append({
+                    "presupuesto_id": nuevo_presupuesto_id,
+                    "nombre": item.get('nombre', 'Item sin nombre'),
+                    "categoria": item.get('categoria', categoria),
+                    "unidad": item.get('unidad', 'Unidad'),
+                    "cantidad": float(item.get('cantidad', 0)),
+                    "precio_unitario": float(item.get('precio_unitario', 0)),
+                    "total": float(item.get('total', 0)),
+                    "notas": item.get('notas', '')
+                })
+
+        # 3. Insertar todos los ítems
+        if items_to_insert:
+            supabase.table("items_en_presupuesto").insert(items_to_insert).execute()
+        
+        return nuevo_presupuesto_id
             
     except Exception as e:
-        print(f"Error al obtener presupuestos: {e}")
-        return []
-    finally:
-        conn.close()
-
-def contar_items_presupuesto(presupuesto_id: int) -> int:
-    """Cuenta los items asociados a un presupuesto"""
-    conn = get_db()
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT COUNT(*) FROM items_en_presupuesto WHERE presupuesto_id = %s",
-                (presupuesto_id,)
-            )
-            return cur.fetchone()[0]
-    finally:
-        conn.close()
-
-def save_presupuesto_completo(presupuesto_id: int, items_data: Dict[str, Any]) -> bool:
-    """Guarda todos los items de un presupuesto en la base de datos"""
-    conn = get_db()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("DELETE FROM items_en_presupuesto WHERE presupuesto_id = %s", (presupuesto_id,))
-            
-            for categoria, data in items_data.items():
-                if data.get('mano_obra', 0) > 0:
-                    cur.execute(
-                        """INSERT INTO items_en_presupuesto 
-                        (presupuesto_id, categoria_id, nombre_personalizado, unidad, cantidad, precio_unitario, notas)
-                        VALUES (%s, (SELECT id FROM categorias WHERE nombre = %s), 'Mano de Obra', 'Unidad', 1, %s, 'Mano de obra')""",
-                        (presupuesto_id, categoria, data['mano_obra'])
-                    )
-                
-                for item in data['items']:
-                    cur.execute(
-                        """INSERT INTO items_en_presupuesto 
-                        (presupuesto_id, categoria_id, nombre_personalizado, unidad, cantidad, precio_unitario, notas)
-                        VALUES (%s, (SELECT id FROM categorias WHERE nombre = %s), %s, %s, %s, %s, %s)""",
-                        (presupuesto_id, categoria, item['nombre'], item['unidad'], item['cantidad'], item['precio_unitario'], item.get('notas', '')))
-            
-            cur.execute(
-                """UPDATE presupuestos SET total = (
-                    SELECT COALESCE(SUM(total), 0) 
-                    FROM items_en_presupuesto 
-                    WHERE presupuesto_id = %s
-                ) WHERE id = %s""",
-                (presupuesto_id, presupuesto_id)
-            )
-            
-            conn.commit()
-            return True
-    except Exception as e:
-        conn.rollback()
         print(f"Error al guardar presupuesto completo: {e}")
-        return False
-    finally:
-        conn.close()
+        return None
 
-def delete_presupuesto(presupuesto_id: int, cliente_id: int) -> bool:
-    """
-    Elimina un presupuesto de la base de datos
-
-    Args:
-        presupuesto_id: ID del presupuesto a eliminar
-        user_id: ID del usuario que realiza la eliminación
-
-    Returns:
-        True si la eliminación fue exitosa, False si no
-    """
-    conn = get_db()
+def update_presupuesto_detalles(presupuesto_id: int, cliente_id: int, lugar_id: int, descripcion: str, total_general: float) -> bool:
+    """Actualiza los campos principales del presupuesto."""
     try:
-        with conn.cursor() as cur:
-            # Verificar que el presupuesto pertenece al usuario antes de eliminar
-            cur.execute("""
-                DELETE FROM presupuestos 
-                WHERE id = %s AND creado_por = %s
-            """, (presupuesto_id, cliente_id))
-            conn.commit()
-            return cur.rowcount > 0
+        response = supabase.table("presupuestos").update({
+            "cliente_id": cliente_id,
+            "lugar_trabajo_id": lugar_id,
+            "descripcion": descripcion,
+            "total": float(total_general)
+        }).eq("id", presupuesto_id).execute() # <--- Se asegura que se actualice el presupuesto principal
+        return len(response.data) > 0
     except Exception as e:
-        conn.rollback()
-        print(f"Error al eliminar presupuesto: {e}")
+        print(f"Error al actualizar detalles del presupuesto {presupuesto_id}: {e}")
         return False
-    finally:
-        conn.close()
-# Función auxiliar para obtener el ID de la categoría (necesario para items_en_presupuesto)
-def save_edited_presupuesto(
-    cliente_id: int, 
-    lugar_id: int, 
-    descripcion_original: str, 
-    total: float, 
-    user_id: int, 
-    items_data: List[Dict[str, Any]]
-) -> Optional[int]:
-    """Crea un nuevo presupuesto como versión editada de uno existente."""
-    
-    conn = get_db()
+        
+def delete_items_presupuesto(presupuesto_id: int) -> bool:
+    """Elimina todos los ítems asociados a un presupuesto."""
     try:
-        with conn.cursor() as cur:
-            # 1. Crear la cabecera del nuevo presupuesto
-            nueva_descripcion = descripcion_original # CORRECCIÓN: Usar f-string en lugar de {}
+        supabase.table("items_en_presupuesto").delete().eq("presupuesto_id", presupuesto_id).execute()
+        return True
+    except Exception as e:
+        print(f"Error al eliminar ítems del presupuesto {presupuesto_id}: {e}")
+        return False
+
+def save_edited_presupuesto(presupuesto_id: int, user_id: str, cliente_id: int, lugar_id: int, descripcion: str, items_data: Dict[str, Any], total_general: float) -> Optional[int]:
+    """
+    Guarda los cambios de un presupuesto existente.
+    1. Actualiza el presupuesto principal.
+    2. Elimina todos los ítems anteriores.
+    3. Inserta todos los ítems nuevos.
+    """
+    try:
+        # 1. Actualizar el registro principal
+        # El campo 'total' debe ser float
+        num_items = sum(len(data['items']) for cat, data in items_data.items() if cat != 'general') + (1 if items_data['general'].get('mano_obra', 0) > 0 else 0)
+        
+        actualizacion_principal = supabase.table("presupuestos").update({
+            "cliente_id": cliente_id,
+            "lugar_trabajo_id": lugar_id,
+            "descripcion": descripcion,
+            "total": float(total_general),
+            "num_items": num_items
+        }).eq("id", presupuesto_id).eq("creado_por", user_id).execute()
+        
+        if not actualizacion_principal.data:
+            print(f"Error: No se encontró el presupuesto {presupuesto_id} para actualizar o no tiene permiso.")
+            return None
             
-            cur.execute(
-                """
-                INSERT INTO presupuestos 
-                (cliente_id, lugar_trabajo_id, fecha_creacion, descripcion, total, creado_por)
-                VALUES (%s, %s, CURRENT_TIMESTAMP, %s, %s, %s) 
-                RETURNING id
-                """,
-                (cliente_id, lugar_id, nueva_descripcion, total, user_id)
-            )
-            nuevo_presupuesto_id = cur.fetchone()[0]
+        # 2. Eliminar ítems anteriores
+        delete_items_presupuesto(presupuesto_id)
+        
+        # 3. Preparar los ítems para la inserción masiva (similar a save_presupuesto_completo)
+        items_to_insert = []
+        for categoria, data in items_data.items():
+            # Añadir Mano de Obra General si existe
+            mano_obra_general = data.get('mano_obra', 0)
+            if categoria == 'general' and mano_obra_general > 0:
+                 items_to_insert.append({
+                    "presupuesto_id": presupuesto_id,
+                    "nombre": "Mano de Obra General",
+                    "categoria": "General", 
+                    "unidad": "Global",
+                    "cantidad": 1.0,
+                    "precio_unitario": float(mano_obra_general),
+                    "total": float(mano_obra_general),
+                    "notas": "Costo de mano de obra para el trabajo completo."
+                })
             
-            # 2. Guardar los items asociados al nuevo presupuesto
-            for item in items_data:
-                # Asegurarnos de que los valores numéricos sean float
-                cantidad = float(item.get('cantidad', 0))
-                precio_unitario = float(item.get('precio_unitario', 0))
-                total_item = float(item.get('total', 0))
-                
-                cur.execute(
-                    """
-                    INSERT INTO items_en_presupuesto 
-                    (presupuesto_id, categoria_id, nombre_personalizado, unidad, cantidad, precio_unitario, notas)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    """,
-                    (
-                        nuevo_presupuesto_id,
-                        item.get('categoria_id'),
-                        item.get('nombre_personalizado', ''),
-                        item.get('unidad', 'Unidad'),
-                        cantidad,
-                        precio_unitario,
-                        item.get('descripcion', '')
-                    )
-                )
+            # Añadir ítems de categorías específicas
+            for item in data['items']:
+                # Asegurar que los valores numéricos son float
+                items_to_insert.append({
+                    "presupuesto_id": presupuesto_id,
+                    "nombre": item.get('nombre', 'Item sin nombre'),
+                    "categoria": item.get('categoria', categoria),
+                    "unidad": item.get('unidad', 'Unidad'),
+                    "cantidad": float(item.get('cantidad', 0)),
+                    "precio_unitario": float(item.get('precio_unitario', 0)),
+                    "total": float(item.get('total', 0)),
+                    "notas": item.get('notas', '')
+                })
             
-            conn.commit()
-            return nuevo_presupuesto_id
+        if items_to_insert:
+            supabase.table("items_en_presupuesto").insert(items_to_insert).execute()
+        
+        return presupuesto_id
             
     except Exception as e:
         print(f"Error al guardar presupuesto editado: {e}")
-        conn.rollback()
         return None
-    finally:
-        conn.close()
+
+def get_presupuesto_detallado(presupuesto_id: int) -> Optional[Dict[str, Any]]:
+    """Obtiene todos los detalles de un presupuesto por su ID."""
+    try:
+        # Obtener el registro principal del presupuesto
+        presupuesto_response = supabase.table("presupuestos").select(
+            "*, cliente:cliente_id(*), lugar:lugar_trabajo_id(*)"
+        ).eq("id", presupuesto_id).limit(1).execute()
+        
+        if not presupuesto_response.data:
+            return None
+            
+        presupuesto = presupuesto_response.data[0]
+        
+        # Obtener los ítems asociados
+        items_response = supabase.table("items_en_presupuesto").select("*").eq("presupuesto_id", presupuesto_id).order("id").execute()
+        
+        # Estructurar la respuesta
+        detalle = {
+            "id": presupuesto.get('id'),
+            "fecha": presupuesto.get('fecha_creacion'),
+            "cliente": presupuesto.get('cliente'), # Viene anidado
+            "lugar": presupuesto.get('lugar'),     # Viene anidado
+            "descripcion": presupuesto.get('descripcion'),
+            "total": presupuesto.get('total'),
+            "items": items_response.data or []
+        }
+        return detalle
+
+    except Exception as e:
+        print(f"Error al obtener detalle del presupuesto {presupuesto_id}: {e}")
+        return None
+
+def get_presupuestos_usuario(user_id: str, filtros: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Obtiene los presupuestos de un usuario con filtros."""
+    try:
+        # Consulta con JOIN para obtener cliente y lugar
+        query = supabase.table("presupuestos").select(
+            "id, fecha_creacion, total, num_items, cliente:cliente_id(*), lugar:lugar_trabajo_id(*)"
+        ).eq("creado_por", user_id) # Filtrado MANDATORIO por el ID de usuario (UUID)
+
+        # Aplicar filtros
+        if 'cliente_id' in filtros and filtros['cliente_id'] is not None:
+            query = query.eq("cliente_id", filtros['cliente_id'])
+        if 'lugar_id' in filtros and filtros['lugar_id'] is not None:
+            query = query.eq("lugar_trabajo_id", filtros['lugar_id'])
+        if 'fecha_inicio' in filtros and filtros['fecha_inicio'] is not None:
+            # Filtro por fecha usando el formato ISO 8601 que espera Supabase
+            query = query.gte("fecha_creacion", filtros['fecha_inicio'].isoformat())
+
+        # Ordenar por fecha descendente
+        response = query.order("fecha_creacion", desc=True).execute()
+
+        # Mapear la respuesta para el formato esperado por Streamlit
+        presupuestos_formateados = []
+        for p in response.data:
+            # Conversión segura de fecha
+            fecha_creacion = p.get('fecha_creacion')
+            if fecha_creacion and isinstance(fecha_creacion, str):
+                try:
+                    # Supabase devuelve ISO 8601 (con o sin Z)
+                    fecha_obj = datetime.fromisoformat(fecha_creacion.replace('Z', '+00:00'))
+                except ValueError:
+                    fecha_obj = datetime(1970, 1, 1) # Fallback
+            else:
+                fecha_obj = datetime(1970, 1, 1)
+                
+            presupuestos_formateados.append({
+                'id': p['id'],
+                'fecha': fecha_obj,
+                'total': float(p.get('total', 0)), # Asegurar que es float
+                'num_items': p.get('num_items', 0),
+                'cliente': p.get('cliente', {'nombre': 'N/A'}),
+                'lugar': p.get('lugar', {'nombre': 'N/A'})
+            })
+            
+        return presupuestos_formateados
+
+    except Exception as e:
+        print(f"Error al obtener presupuestos del usuario {user_id}: {e}")
+        return []
+
+def delete_presupuesto(presupuesto_id: int, user_id: str) -> bool:
+    """
+    Elimina un presupuesto y sus ítems asociados.
+    Eliminación en cascada: primero ítems, luego el principal.
+    """
+    try:
+        # 1. Eliminar ítems asociados (si RLS no está configurado para hacerlo en cascada)
+        delete_items_presupuesto(presupuesto_id)
+
+        # 2. Eliminar el presupuesto principal (asegurando pertenencia)
+        response = supabase.table("presupuestos").delete().eq("id", presupuesto_id).eq("creado_por", user_id).execute()
+        return len(response.data) > 0
+    except Exception as e:
+        print(f"Error al eliminar presupuesto completo {presupuesto_id}: {e}")
+        return False
+
 # ==================== FUNCIONES PARA ITEMS y CATEGORIAS ====================
+
 def get_categorias() -> List[Tuple[int, str]]:
     """Obtiene todas las categorías existentes (id, nombre)"""
-    conn = get_db()
     try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT id, nombre FROM categorias ORDER BY nombre")
-            return cur.fetchall()
-    finally:
-        conn.close()
+        response = supabase.table("categorias").select("id, nombre").order("nombre").execute()
+        return [(d['id'], d['nombre']) for d in response.data]
+    except Exception as e:
+        print(f"Error al obtener categorias: {e}")
+        return []
 
-def create_categoria(nombre: str, user_id: int) -> Optional[int]:
-    conn = get_db()
+def create_categoria(nombre: str, user_id: str) -> Optional[int]:
+    """Crea una nueva categoría. user_id es string (UUID)."""
     try:
-        with conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO categorias (nombre, creado_por) VALUES (%s, %s) RETURNING id",
-                (nombre, user_id)
-            ) 
-            conn.commit() 
-            new_id = cur.fetchone()[0]            
-            return new_id
+        response = supabase.table("categorias").insert({
+            "nombre": nombre,
+            "creado_por": user_id
+        }).execute() 
+        
+        return response.data[0]['id'] if response.data else None
     except Exception as e:
         print(f"Error al crear categoria: {e}")
-        conn.rollback()
-        raise e
-    finally:
-        conn.close()
-
-
-#nuevos
+        return None
