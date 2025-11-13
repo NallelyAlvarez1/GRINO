@@ -17,8 +17,10 @@ from utils.pdf import (
 )
 from utils.components import safe_numeric_value # Importamos la función segura
 
+st.set_page_config(page_title="Historial", page_icon="🌱", layout="wide")
 # Ejecuta la comprobación de login al inicio
 check_login()
+
 
 
 def _show_presupuesto_detail(presupuesto_id: int, cliente_nombre: str, lugar_nombre: str):

@@ -20,6 +20,7 @@ from utils.components import (\
 from utils.pdf import generar_pdf
 from utils.auth import check_login
 
+st.set_page_config(page_title="Editar", page_icon="🌱", layout="wide")
 # Ejecuta la comprobación de login al inicio
 check_login()
 

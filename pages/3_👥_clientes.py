@@ -5,7 +5,7 @@ import pandas as pd
 from datetime import datetime
 
 
-
+st.set_page_config(page_title="Clientes", page_icon="🌱", layout="wide")
 check_login()
 
 def mostrar_formulario_cliente(cliente_id=None, datos_actuales=None):

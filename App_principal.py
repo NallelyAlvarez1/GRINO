@@ -1,11 +1,22 @@
 import streamlit as st
 from utils.auth import check_login, authenticate, register_user, sign_out
-# La función get_db ya no se usa, ya que la conexión se maneja dentro de utils/database y utils/db
-# from utils.database import get_db 
+from utils.db import get_supabase_client, test_supabase_connection # Asegúrate de importar la función de prueba
+
+# Obtener el cliente
+supabase = get_supabase_client()
+
+# 🚦 Verificar la conexión
+st.subheader("Estado de la Conexión a Supabase")
+if test_supabase_connection(supabase):
+    st.success("✅ Conexión a Supabase establecida y verificada correctamente.")
+else:
+    st.warning("⚠️ Fallo en la verificación de la conexión a Supabase.")
 
 
 # Configuración de página
-st.set_page_config(page_title="Sistema de Presupuestos", layout="wide")
+st.set_page_config(page_title="GRINO", page_icon="🌱", layout="wide")
+
+
 
 # Al inicio del archivo, asegurar las claves de sesión
 if 'user_id' not in st.session_state:

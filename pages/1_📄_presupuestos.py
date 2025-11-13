@@ -14,6 +14,7 @@ from utils.database import (\
     save_presupuesto_completo
 )
 
+st.set_page_config(page_title="GRINO", page_icon="🌱", layout="wide")
 # Ejecuta la comprobación de login al inicio
 check_login()
 

@@ -18,14 +18,27 @@ def get_supabase_client() -> Client:
     """Devuelve la instancia del cliente Supabase, cacheada globalmente."""
     return initialize_supabase_client(st.secrets)
 
+# ---
 
-#from supabase import create_client
-#import streamlit as st
+def test_supabase_connection(supabase_client: Client) -> bool:
+    """
+    Intenta realizar una operación de lectura simple para verificar la conexión.
+    Asegúrate de reemplazar 'nombre_de_una_tabla_existente' con una tabla real.
+    """
+    try:
+        # Intenta seleccionar los primeros 0 registros de una tabla existente.
+        # Esto verifica la conexión y las credenciales sin transferir muchos datos.
+        response = supabase_client.from_('nombre_de_una_tabla_existente').select('*').limit(0).execute()
+        
+        # Una conexión exitosa generalmente no lanzará una excepción y 
+        # la respuesta contendrá datos de la tabla (aunque vacíos por el limit(0)).
+        if response and response.data is not None:
+            return True
+        else:
+            # Podría ser un error de credenciales o de la URL si llega aquí sin excepción
+            st.error("La conexión fue posible, pero la respuesta no es válida.")
+            return False
 
-#@st.cache_resource
-#def get_client():
-    #url = st.secrets["https://fdpfowzkudtsbfwqonfm.supabase.co"]
-    #key = st.secrets["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZkcGZvd3prdWR0c2Jmd3FvbmZtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA5NzExMjcsImV4cCI6MjA3NjU0NzEyN30.n6XeuTOaJZS6_Nqi2bMf8o2r7BPFJcpEOTwJGSThgqM"]
-    #return create_client(url, key)
-
-#supabase = get_client()
+    except Exception as e:
+        st.error(f"❌ Error de conexión a Supabase: {e}")
+        return False
