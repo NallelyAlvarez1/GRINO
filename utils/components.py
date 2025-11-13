@@ -25,8 +25,6 @@ def safe_numeric_value(value: Any) -> float:
         return 0.0
 
 # ==================== SECCION CLIENTE - LUGAR DE TRABAJO ====================
-# [Contenido de show_cliente_lugar_selector y _selector_entidad se asume correcto, 
-# se enfoca en que las llamadas a create/get sean seguras.]
 
 def _selector_entidad(datos: List[Tuple[int, str]], label: str, key: str, btn_nuevo: str, modal_title: str, placeholder_nombre: str, funcion_creacion: callable, label_visibility: str) -> Optional[int]:
     # ... (cuerpo de la función original)
@@ -151,7 +149,6 @@ def show_cliente_lugar_selector() -> Tuple[int, str, int, str]:
     # ⚠️ Retorna los IDs y los nombres
     return cliente_id, cliente_nombre, lugar_id, lugar_nombre, descripcion
 
-
 # ==================== SECCIÓN ITEMS Y CATEGORÍAS ====================
 
 def selector_categoria(key_suffix: str) -> Optional[int]:
@@ -273,7 +270,6 @@ def _render_item_input(cat_nombre: str, item_index: int):
     # Mostrar el subtotal del ítem
     st.markdown(f"<p style='text-align: right; margin-top: -10px; margin-bottom: 5px;'>Subtotal: <b>${current_item['total']:,.2f}</b></p>", unsafe_allow_html=True)
     st.markdown("---")
-
 
 def show_items_presupuesto():
     """Muestra la interfaz para agregar/editar ítems agrupados por categoría."""
@@ -442,7 +438,6 @@ def show_mano_obra():
             step=100.0,
             key=f"mo_cat_{cat_nombre}"
         )
-
 
 def show_resumen():
     """Muestra el resumen final del presupuesto."""

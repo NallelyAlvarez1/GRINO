@@ -4,9 +4,7 @@ from utils.auth import check_login
 import pandas as pd
 from datetime import datetime
 
-
 st.set_page_config(page_title="Clientes", page_icon="🌱", layout="wide")
-check_login()
 
 def mostrar_formulario_cliente(cliente_id=None, datos_actuales=None):
     """Muestra formulario para crear/editar cliente"""
@@ -168,8 +166,10 @@ def main():
             del st.session_state['eliminar_cliente']
             st.rerun()
 
+is_logged_in = check_login()
+
 if __name__ == "__main__":
-    if 'user_id' in st.session_state and st.session_state.user_id:
+    if is_logged_in:
         main()
     else:
         st.error("🔒 Por favor inicie sesión primero")

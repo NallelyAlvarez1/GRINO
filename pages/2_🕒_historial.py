@@ -2,7 +2,8 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
-
+from utils.database import get_clientes_detallados, create_cliente, update_cliente, delete_cliente
+from utils.auth import check_login
 # Asumiendo que estas funciones importadas manejan la conexión a Supabase
 from utils.database import (
     get_presupuestos_usuario, 
@@ -18,10 +19,6 @@ from utils.pdf import (
 from utils.components import safe_numeric_value # Importamos la función segura
 
 st.set_page_config(page_title="Historial", page_icon="🌱", layout="wide")
-# Ejecuta la comprobación de login al inicio
-check_login()
-
-
 
 def _show_presupuesto_detail(presupuesto_id: int, cliente_nombre: str, lugar_nombre: str):
     """Obtiene el detalle completo y lo muestra agrupado por categoría."""
@@ -116,7 +113,6 @@ def _show_presupuesto_detail(presupuesto_id: int, cliente_nombre: str, lugar_nom
                 
             st.divider()
     st.markdown(f"#### 💵 **Total General del Presupuesto:** **${total_general:,.0f}**")
-
 
 def main():
     st.title("🕒 Historial de Presupuestos")
@@ -287,15 +283,6 @@ def main():
                         cliente_nombre=p.get('cliente', {}).get('nombre', 'N/A'),
                         lugar_nombre=p.get('lugar', {}).get('nombre', 'N/A')
                     )
-import streamlit as st
-from utils.database import get_clientes_detallados, create_cliente, update_cliente, delete_cliente
-from utils.auth import check_login
-import pandas as pd
-from datetime import datetime
-from typing import Optional, Dict, Any
-
-# Ejecuta la comprobación de login al inicio
-check_login()
 
 def mostrar_formulario_cliente(cliente_id: Optional[int] = None, datos_actuales: Optional[Dict[str, Any]] = None):
     """Muestra formulario para crear/editar cliente"""
@@ -376,7 +363,6 @@ def mostrar_modal_eliminar(cliente_id: int, cliente_nombre: str):
             if st.button("❌ Cancelar Eliminación", key="cancel_delete_btn", use_container_width=True):
                 del st.session_state['eliminar_cliente']
                 st.rerun()
-
 
 def clientes_page():
     st.title("👥 Gestión de Clientes")
@@ -481,16 +467,19 @@ def clientes_page():
         else:
             del st.session_state['eliminar_cliente']
             st.rerun()
+is_logged_in = check_login()
 
 if __name__ == "__main__":
-    if check_login():
+    if is_logged_in:
         clientes_page()
     else:
         st.error("🔒 Por favor inicie sesión primero")
         st.page_link("App_principal.py", label="Ir a página de inicio")
+
 if __name__ == "__main__":
-    if 'user_id' in st.session_state and st.session_state.user_id:
+    if is_logged_in:
         main()
     else:
         st.error("🔒 Por favor inicie sesión primero")
         st.page_link("App_principal.py", label="Ir a página de inicio")
+

@@ -2,12 +2,7 @@ import streamlit as st
 # from utils.db import get_supabase_client # Se mantiene la importación si la conexión global está aquí
 from utils.db import get_supabase_client 
 
-# Asumimos que get_supabase_client() retorna el cliente de Supabase
-supabase = get_supabase_client()
-
 # ==================== FUNCIONES DE AUTENTICACIÓN ====================
-
-# ELIMINADAS: hash_password y verify_password - Supabase Auth maneja el hashing
 
 def check_login() -> bool:
     """Verifica si el usuario está logueado."""
@@ -16,6 +11,7 @@ def check_login() -> bool:
 
 def authenticate(email: str, password: str) -> bool:
     """Autentica credenciales usando Supabase Auth (email/password)."""
+    supabase = get_supabase_client()
     try:
         # Usamos sign_in_with_password de Supabase Auth
         # El método sing_in_with_password devuelve la sesión y el usuario
@@ -38,6 +34,7 @@ def authenticate(email: str, password: str) -> bool:
 
 def register_user(email: str, password: str) -> bool:
     """Registra un nuevo usuario en Supabase Auth."""
+    supabase = get_supabase_client()
     try:
         # Supabase crea el usuario y envía el email de confirmación (si está configurado)
         response = supabase.auth.sign_up({"email": email, "password": password})
@@ -51,6 +48,7 @@ def register_user(email: str, password: str) -> bool:
 
 def sign_out():
     """Cierra la sesión del usuario en Supabase y limpia el estado de Streamlit."""
+    supabase = get_supabase_client()
     try:
         supabase.auth.sign_out()
     except Exception as e:

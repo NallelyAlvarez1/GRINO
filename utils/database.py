@@ -11,14 +11,12 @@ except ImportError:
     st.error("Error: Falta el archivo 'utils/db.py' con la función get_supabase_client.")
     st.stop()
 
-# Conexión global para el módulo
-supabase: Client = get_supabase_client()
-
 
 # ==================== UTILIDADES ====================
 
 def _get_entidad_por_id(tabla: str, entity_id: int) -> Optional[Dict[str, Any]]:
     """Función genérica para obtener una entidad por su ID."""
+    supabase = get_supabase_client()
     try:
         response = supabase.table(tabla).select("*").eq("id", entity_id).limit(1).execute()
         if response.data:
@@ -32,6 +30,7 @@ def _get_entidad_por_id(tabla: str, entity_id: int) -> Optional[Dict[str, Any]]:
 
 def get_clientes() -> List[Tuple[int, str]]:
     """Obtiene todos los clientes (id, nombre) - para selectores."""
+    supabase = get_supabase_client()
     try:
         # Se obtiene el campo 'id' como integer y 'nombre' como string
         response = supabase.table("clientes").select("id, nombre").order("nombre").execute()
@@ -43,6 +42,7 @@ def get_clientes() -> List[Tuple[int, str]]:
 
 def get_clientes_detallados(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
     """Obtiene todos los clientes con detalles, filtrados opcionalmente por user_id."""
+    supabase = get_supabase_client()
     try:
         query = supabase.table("clientes").select("*, users!inner(email)").order("nombre")
         if user_id:
@@ -77,6 +77,7 @@ def get_clientes_detallados(user_id: Optional[str] = None) -> List[Dict[str, Any
 
 def create_cliente(nombre: str, user_id: str) -> Optional[int]:
     """Crea un nuevo cliente. user_id es string (UUID)."""
+    supabase = get_supabase_client()
     try:
         response = supabase.table("clientes").insert({
             "nombre": nombre,
@@ -90,6 +91,7 @@ def create_cliente(nombre: str, user_id: str) -> Optional[int]:
 
 def update_cliente(cliente_id: int, nombre: str, user_id: str) -> bool:
     """Actualiza un cliente existente."""
+    supabase = get_supabase_client()
     try:
         # Añadimos .eq('creado_por', user_id) para seguridad a nivel de aplicación (RLS se encarga de esto en Supabase)
         response = supabase.table("clientes").update({
@@ -102,6 +104,7 @@ def update_cliente(cliente_id: int, nombre: str, user_id: str) -> bool:
 
 def delete_cliente(cliente_id: int, user_id: str) -> bool:
     """Elimina un cliente."""
+    supabase = get_supabase_client()
     try:
         response = supabase.table("clientes").delete().eq("id", cliente_id).eq("creado_por", user_id).execute()
         return len(response.data) > 0
@@ -114,6 +117,7 @@ def delete_cliente(cliente_id: int, user_id: str) -> bool:
 
 def get_lugares_trabajo() -> List[Tuple[int, str]]:
     """Obtiene todos los lugares de trabajo (id, nombre)."""
+    supabase = get_supabase_client()
     try:
         response = supabase.table("lugares_trabajo").select("id, nombre").order("nombre").execute()
         return [(d['id'], d['nombre']) for d in response.data]
@@ -123,6 +127,7 @@ def get_lugares_trabajo() -> List[Tuple[int, str]]:
 
 def create_lugar_trabajo(nombre: str, user_id: str) -> Optional[int]:
     """Crea un nuevo lugar de trabajo. user_id es string (UUID)."""
+    supabase = get_supabase_client()
     try:
         response = supabase.table("lugares_trabajo").insert({
             "nombre": nombre,
@@ -141,6 +146,7 @@ def save_presupuesto_completo(user_id: str, cliente_id: int, lugar_id: int, desc
     Guarda el presupuesto principal y sus ítems.
     Regresa el ID del presupuesto creado.
     """
+    supabase = get_supabase_client()
     try:
         # 1. Guardar el presupuesto principal
         # El campo 'total' debe ser float
@@ -199,6 +205,7 @@ def save_presupuesto_completo(user_id: str, cliente_id: int, lugar_id: int, desc
 
 def update_presupuesto_detalles(presupuesto_id: int, cliente_id: int, lugar_id: int, descripcion: str, total_general: float) -> bool:
     """Actualiza los campos principales del presupuesto."""
+    supabase = get_supabase_client()
     try:
         response = supabase.table("presupuestos").update({
             "cliente_id": cliente_id,
@@ -213,6 +220,7 @@ def update_presupuesto_detalles(presupuesto_id: int, cliente_id: int, lugar_id: 
         
 def delete_items_presupuesto(presupuesto_id: int) -> bool:
     """Elimina todos los ítems asociados a un presupuesto."""
+    supabase = get_supabase_client()
     try:
         supabase.table("items_en_presupuesto").delete().eq("presupuesto_id", presupuesto_id).execute()
         return True
@@ -227,6 +235,7 @@ def save_edited_presupuesto(presupuesto_id: int, user_id: str, cliente_id: int, 
     2. Elimina todos los ítems anteriores.
     3. Inserta todos los ítems nuevos.
     """
+    supabase = get_supabase_client()
     try:
         # 1. Actualizar el registro principal
         # El campo 'total' debe ser float
@@ -289,6 +298,7 @@ def save_edited_presupuesto(presupuesto_id: int, user_id: str, cliente_id: int, 
 
 def get_presupuesto_detallado(presupuesto_id: int) -> Optional[Dict[str, Any]]:
     """Obtiene todos los detalles de un presupuesto por su ID."""
+    supabase = get_supabase_client()
     try:
         # Obtener el registro principal del presupuesto
         presupuesto_response = supabase.table("presupuestos").select(
@@ -321,6 +331,7 @@ def get_presupuesto_detallado(presupuesto_id: int) -> Optional[Dict[str, Any]]:
 
 def get_presupuestos_usuario(user_id: str, filtros: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Obtiene los presupuestos de un usuario con filtros."""
+    supabase = get_supabase_client()
     try:
         # Consulta con JOIN para obtener cliente y lugar
         query = supabase.table("presupuestos").select(
@@ -373,6 +384,7 @@ def delete_presupuesto(presupuesto_id: int, user_id: str) -> bool:
     Elimina un presupuesto y sus ítems asociados.
     Eliminación en cascada: primero ítems, luego el principal.
     """
+    supabase = get_supabase_client()
     try:
         # 1. Eliminar ítems asociados (si RLS no está configurado para hacerlo en cascada)
         delete_items_presupuesto(presupuesto_id)
@@ -388,6 +400,7 @@ def delete_presupuesto(presupuesto_id: int, user_id: str) -> bool:
 
 def get_categorias() -> List[Tuple[int, str]]:
     """Obtiene todas las categorías existentes (id, nombre)"""
+    supabase = get_supabase_client()
     try:
         response = supabase.table("categorias").select("id, nombre").order("nombre").execute()
         return [(d['id'], d['nombre']) for d in response.data]
@@ -397,6 +410,7 @@ def get_categorias() -> List[Tuple[int, str]]:
 
 def create_categoria(nombre: str, user_id: str) -> Optional[int]:
     """Crea una nueva categoría. user_id es string (UUID)."""
+    supabase = get_supabase_client()
     try:
         response = supabase.table("categorias").insert({
             "nombre": nombre,

@@ -15,20 +15,16 @@ from utils.components import (\
     show_items_presupuesto,\
     show_mano_obra,\
     show_resumen,\
-    safe_numeric_value # Importamos la utilidad de safe_numeric
+    safe_numeric_value 
 )
 from utils.pdf import generar_pdf
 from utils.auth import check_login
 
 st.set_page_config(page_title="Editar", page_icon="🌱", layout="wide")
-# Ejecuta la comprobación de login al inicio
-check_login()
-
 # Constantes
 EDICION_KEY = 'categorias_edicion'
 HISTORIAL_PAGE = "pages/2_🕒_historial.py"
 
-# Redefinir calcular_total si es necesario (ya está en 1_presupuestos.py)
 def calcular_total_edicion(items_data: Dict[str, Any]) -> float:
     """Calcula el total general del presupuesto, usando la utilidad de valores seguros."""
     total = 0.0
@@ -301,9 +297,10 @@ def editar_presupuesto_page():
                     st.error(f"❌ Error crítico al procesar la edición: {e}")
                     st.exception(e)
 
+is_logged_in = check_login()
 
 if __name__ == "__main__":
-    if check_login():
+    if is_logged_in:
         editar_presupuesto_page()
     else:
         st.error("🔒 Por favor inicie sesión primero")

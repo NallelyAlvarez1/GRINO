@@ -15,8 +15,6 @@ from utils.database import (\
 )
 
 st.set_page_config(page_title="GRINO", page_icon="🌱", layout="wide")
-# Ejecuta la comprobación de login al inicio
-check_login()
 
 def calcular_total(items_data: Dict[str, Any]) -> float:
     """Calcula el total general del presupuesto, usando la utilidad de valores seguros."""
@@ -135,5 +133,11 @@ def main():
                 st.error(f"Error al guardar: {str(e)}")
                 st.exception(e)
 
+is_logged_in = check_login()
+
 if __name__ == "__main__":
-    main()
+    if is_logged_in:
+        main()
+    else:
+        st.error("🔒 Por favor inicie sesión primero")
+        st.page_link("App_principal.py", label="Ir a página de inicio")
