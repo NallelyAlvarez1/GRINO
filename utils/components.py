@@ -370,107 +370,133 @@ def show_items_presupuesto() -> Dict[str, Any]:
     
     return st.session_state['categorias']
 
-def show_mano_obra():
-    """Muestra el input para mano de obra general y por categoría."""
-    st.subheader("Mano de Obra", divider="blue")
-    
-    if 'categorias' not in st.session_state:
-        st.session_state['categorias'] = {'general': {'items': [], 'mano_obra': 0}}
+def show_mano_obra(items_data: Dict[str, Any]) -> None:
+    """Muestra la sección para configurar mano de obra por categoría"""
+    with st.expander("🔧 Agregar Mano de Obra", expanded=False):
+        st.markdown("### Configurar Mano de Obra")
         
-    if 'general' not in st.session_state['categorias']:
-        st.session_state['categorias']['general'] = {'items': [], 'mano_obra': 0}
+        # Obtener categorías que tienen items (excluyendo 'general')
+        categorias_con_items = [cat for cat in items_data.keys() if cat != 'general' and items_data[cat]['items']]
         
-    # 1. Mano de Obra General - SOLO ENTEROS
-    st.markdown("##### Mano de Obra General")
-    mano_obra_input = st.text_input(
-        "Mano de Obra General (valor único para el trabajo completo)",
-        value=str(int(st.session_state['categorias']['general'].get('mano_obra', 0))),
-        key="mo_general_input"
-    )
-    st.session_state['categorias']['general']['mano_obra'] = clean_integer_input(mano_obra_input)
+        if not categorias_con_items:
+            st.warning("📭 Primero agrega ítems a una categoría para asignar mano de obra")
+        else:
+            # Selector de categoría
+            categoria_seleccionada = st.selectbox(
+                "Seleccionar categoría:",
+                options=categorias_con_items,
+                key="select_cat_mano_obra"
+            )
+            
+            # Input de costo de mano de obra (solo enteros)
+            st.markdown("##### 💰 Costo de Mano de Obra")
+            costo_input = st.text_input(
+                "Costo de mano de obra ($):",
+                value=str(items_data[categoria_seleccionada].get('mano_obra', 0)),
+                key="input_costo_mano_obra"
+            )
+            costo_mano_obra = clean_integer_input(costo_input)
+            
+            # Botón para aplicar mano de obra
+            col1, col2 = st.columns([1, 1])
+            with col1:
+                if st.button("💾 Aplicar Mano de Obra", key="btn_aplicar_mano_obra", use_container_width=True):
+                    items_data[categoria_seleccionada]['mano_obra'] = costo_mano_obra
+                    st.success(f"✅ Mano de obra de **${costo_mano_obra:,}** aplicada a **{categoria_seleccionada}**")
+                    st.rerun()
+            
+            with col2:
+                if st.button("🗑️ Limpiar Mano de Obra", key="btn_limpiar_mano_obra", use_container_width=True):
+                    items_data[categoria_seleccionada]['mano_obra'] = 0
+                    st.success(f"✅ Mano de obra eliminada de **{categoria_seleccionada}**")
+                    st.rerun()
 
-    st.markdown("---")
-    
-    # 2. Mano de Obra por Categoría - SOLO ENTEROS
-    st.markdown("##### Mano de Obra por Categoría (Adicional)")
-    
-    categorias_a_mostrar = [cat for cat in st.session_state['categorias'] if cat != 'general' and st.session_state['categorias'][cat]['items']]
-    
-    if not categorias_a_mostrar:
-        st.info("📭 Agrega ítems primero para asignar mano de obra por categoría.")
-        return
+        # Mano de obra general (si es necesaria)
+        st.markdown("---")
+        st.markdown("##### 🏗️ Mano de Obra General")
+        st.info("Mano de obra que aplica a todo el trabajo (no asignada a categoría específica)")
         
-    for cat_nombre in categorias_a_mostrar:
-        if 'mano_obra' not in st.session_state['categorias'][cat_nombre]:
-             st.session_state['categorias'][cat_nombre]['mano_obra'] = 0
-             
-        mano_obra_cat_input = st.text_input(
-            f"Mano de Obra para: {cat_nombre}",
-            value=str(int(st.session_state['categorias'][cat_nombre].get('mano_obra', 0))),
-            key=f"mo_cat_{cat_nombre}_input"
+        mano_obra_general_input = st.text_input(
+            "Mano de Obra General ($):",
+            value=str(items_data.get('general', {}).get('mano_obra', 0)),
+            key="mano_obra_general_input"
         )
-        st.session_state['categorias'][cat_nombre]['mano_obra'] = clean_integer_input(mano_obra_cat_input)
+        mano_obra_general = clean_integer_input(mano_obra_general_input)
+        
+        if 'general' not in items_data:
+            items_data['general'] = {'items': [], 'mano_obra': 0}
+        
+        items_data['general']['mano_obra'] = mano_obra_general
 
-def show_resumen():
-    """Muestra el resumen final del presupuesto."""
-    st.subheader("Resumen del Presupuesto", divider="green")
+# ========== SECCIÓN RESUMEN ==========
+def show_resumen(items_data: Dict[str, Any]) -> None:
+    """Muestra el resumen final del presupuesto"""
+    st.subheader("📊 Resumen del Presupuesto", divider="green")
     
-    if 'categorias' not in st.session_state or not st.session_state['categorias']:
-        st.info("📭 Comience agregando ítems y mano de obra para ver el resumen.")
+    if not items_data or all(not data.get('items') and data.get('mano_obra', 0) == 0 
+                           for cat, data in items_data.items() if cat != 'general'):
+        st.info("📭 No hay ítems agregados aún")
         return
 
-    resumen_data = []
     total_general = 0
 
-    # 1. Mano de Obra General
-    mano_obra_general = safe_numeric_value(st.session_state['categorias']['general'].get('mano_obra', 0.0))
-    total_general += mano_obra_general
-    
+    # Mostrar mano de obra general si existe
+    mano_obra_general = items_data.get('general', {}).get('mano_obra', 0)
     if mano_obra_general > 0:
-         resumen_data.append({
-             'Categoría': 'Mano de Obra General',
-             'Total Ítems': 0,
-             'Mano de Obra': mano_obra_general,
-             'Total Categoría': mano_obra_general
-         })
+        total_general += mano_obra_general
+        st.markdown(f"#### 🏗️ **Mano de obra general:** **${mano_obra_general:,}**")
+        st.markdown("---")
 
-    # 2. Ítems por Categoría
-    for cat, data in st.session_state['categorias'].items():
+    # Mostrar categorías con sus ítems y mano de obra
+    for cat, data in items_data.items():
         if cat == 'general': 
             continue
             
-        items_total = sum(safe_numeric_value(item.get('total')) for item in data['items'])
-        mano_obra = safe_numeric_value(data.get('mano_obra', 0))
-        total_categoria = items_total + mano_obra
-        total_general += total_categoria
+        items = data.get('items', [])
+        mano_obra = data.get('mano_obra', 0)
+        
+        # Solo mostrar categorías que tienen ítems o mano de obra
+        if items or mano_obra > 0:
+            total_categoria = sum(item.get('total', 0) for item in items) + mano_obra
+            total_general += total_categoria
 
-        if total_categoria > 0:
-            resumen_data.append({
-                'Categoría': cat,
-                'Total Ítems': items_total,
-                'Mano de Obra': mano_obra,
-                'Total Categoría': total_categoria
-            })
+            # Encabezado de la categoría
+            st.markdown(f"#### 🔹 {cat}")
             
-    if not resumen_data:
-        st.info("📭 El presupuesto está vacío.")
-        return
+            # Mostrar items en tabla si existen
+            if items:
+                df_items = pd.DataFrame(items)
+                
+                # Configurar columnas para mostrar
+                column_config = {
+                    "nombre": st.column_config.TextColumn("Descripción", width="medium"),
+                    "unidad": st.column_config.TextColumn("Unidad", width="small"),
+                    "cantidad": st.column_config.NumberColumn("Cantidad", width="small"),
+                    "precio_unitario": st.column_config.NumberColumn("P. Unitario", format="$%d", width="small"),
+                    "total": st.column_config.NumberColumn("Total", format="$%d", width="small")
+                }
+                
+                # Si hay notas, mostrarlas
+                if 'notas' in df_items.columns and not df_items['notas'].isna().all():
+                    column_config["notas"] = st.column_config.TextColumn("Notas", width="medium")
+                
+                st.dataframe(
+                    df_items,
+                    column_config=column_config,
+                    hide_index=True,
+                    use_container_width=True
+                )
+            
+            # Mostrar mano de obra de la categoría si existe
+            if mano_obra > 0:
+                st.markdown(f"**Mano de obra {cat}:** **${mano_obra:,}**")
+            
+            # Mostrar total de la categoría
+            st.markdown(f"**Total {cat}:** **${total_categoria:,}**")
+            st.markdown("---")
 
-    # Mostrar resumen en DataFrame
-    df_resumen = pd.DataFrame(resumen_data)
-    
-    st.dataframe(
-        df_resumen,
-        column_config={
-            "Categoría": "Categoría",
-            "Total Ítems": st.column_config.NumberColumn("Total Ítems", format="$%d"),
-            "Mano de Obra": st.column_config.NumberColumn("Mano de Obra", format="$%d"),
-            "Total Categoría": st.column_config.NumberColumn("Total", format="$%d")
-        },
-        hide_index=True,
-        width="stretch"
-    )
-    
-    st.markdown(f"#### 💰 **TOTAL GENERAL DEL PRESUPUESTO:** **${total_general:,.0f}**")
+    # Mostrar total general
+    if total_general > 0:
+        st.markdown(f"#### 💰 **TOTAL GENERAL:** **${total_general:,}**")
     
     return total_general
