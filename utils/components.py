@@ -65,7 +65,7 @@ def _selector_entidad(datos: List[Tuple[int, str]], label: str, key: str, btn_nu
         except StopIteration:
             entidad_id = None
             
-    if st.button(btn_nuevo, key=f"{key}_new_btn", use_container_width=True):
+    if st.button(btn_nuevo, key=f"{key}_new_btn", width='stretch'):
         st.session_state[f'{key}_modal_open'] = True
     
     if st.session_state.get(f'{key}_modal_open', False):
@@ -242,7 +242,7 @@ def show_items_presupuesto() -> Dict[str, Any]:
             with col_boton:
                 st.write("")
                 st.write("")
-                if st.button("➕ Guardar Ítem", type="primary", use_container_width=True):
+                if st.button("➕ Guardar Ítem", type="primary", width='stretch'):
                     if not nombre_item.strip():
                         st.error("Nombre del ítem es requerido")
                     else:
@@ -400,13 +400,13 @@ def show_mano_obra(items_data: Dict[str, Any]) -> None:
             # Botón para aplicar mano de obra
             col1, col2 = st.columns([1, 1])
             with col1:
-                if st.button("💾 Aplicar Mano de Obra", key="btn_aplicar_mano_obra", use_container_width=True):
+                if st.button("💾 Aplicar Mano de Obra", key="btn_aplicar_mano_obra", width='stretch'):
                     items_data[categoria_seleccionada]['mano_obra'] = costo_mano_obra
                     st.success(f"✅ Mano de obra de **${costo_mano_obra:,}** aplicada a **{categoria_seleccionada}**")
                     st.rerun()
             
             with col2:
-                if st.button("🗑️ Limpiar Mano de Obra", key="btn_limpiar_mano_obra", use_container_width=True):
+                if st.button("🗑️ Limpiar Mano de Obra", key="btn_limpiar_mano_obra", width='stretch'):
                     items_data[categoria_seleccionada]['mano_obra'] = 0
                     st.success(f"✅ Mano de obra eliminada de **{categoria_seleccionada}**")
                     st.rerun()
@@ -484,7 +484,7 @@ def show_resumen(items_data: Dict[str, Any]) -> None:
                     df_items,
                     column_config=column_config,
                     hide_index=True,
-                    use_container_width=True
+                    width='stretch'
                 )
             
             # Mostrar mano de obra de la categoría si existe

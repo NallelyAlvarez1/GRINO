@@ -48,7 +48,7 @@ def mostrar_formulario_cliente(cliente_id=None, datos_actuales=None):
 
 def mostrar_modal_eliminar(cliente_id, cliente_nombre):
     """Muestra confirmación para eliminar cliente"""
-    with st.popover("⚠️ Confirmar eliminación", use_container_width=True):
+    with st.popover("⚠️ Confirmar eliminación", width='stretch'):
         st.warning(f"¿Eliminar cliente: {cliente_nombre}?")
         if st.button("🗑️ Eliminar definitivamente", type="primary"):
             try:
@@ -68,7 +68,7 @@ def main():
     with col1:
         busqueda = st.text_input("Buscar clientes", placeholder="Escribe para filtrar...")
     with col2:
-        if st.button("➕ Nuevo cliente", use_container_width=True):
+        if st.button("➕ Nuevo cliente", width='stretch'):
             st.session_state['nuevo_cliente'] = True
     
     # Mostrar formulario de nuevo cliente si está activo
@@ -130,11 +130,11 @@ def main():
                 # Botones de acción
                 col1, col2 = st.columns(2)
                 with col1:
-                    if st.button("✏️.Editar", key=f"edit_{cliente['id']}", use_container_width=True):
+                    if st.button("✏️.Editar", key=f"edit_{cliente['id']}", width='stretch'):
                         st.session_state['editar_cliente'] = cliente['id']
                 
                 with col2:
-                    if st.button("🗑️.Eliminar", key=f"del_{cliente['id']}", use_container_width=True):
+                    if st.button("🗑️.Eliminar", key=f"del_{cliente['id']}", width='stretch'):
                         st.session_state['eliminar_cliente'] = cliente['id']
     
     # Mostrar modal de edición si está activo

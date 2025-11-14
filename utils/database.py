@@ -144,7 +144,7 @@ def create_lugar_trabajo(nombre: str, user_id: str) -> Optional[int]:
 
 # ==================== FUNCIONES DE PRESUPUESTOS ====================
 
-def save_presupuesto_completo(user_id: str, cliente_id: int, lugar_id: int, descripcion: str, items_data: Dict[str, Any], total_general: float) -> Optional[int]:
+def save_presupuesto_completo(user_id: str, cliente_id: int, lugar_id: int, descripcion: str, items_data: Dict[str, Any], total: float) -> Optional[int]:
     """
     Guarda el presupuesto principal y sus ítems.
     Regresa el ID del presupuesto creado.
@@ -157,7 +157,7 @@ def save_presupuesto_completo(user_id: str, cliente_id: int, lugar_id: int, desc
             "cliente_id": cliente_id,
             "lugar_trabajo_id": lugar_id,
             "descripcion": descripcion,
-            "total": float(total_general),
+            "total": float(total),
             "num_items": sum(len(data['items']) for cat, data in items_data.items() if cat != 'general') + (1 if items_data['general'].get('mano_obra', 0) > 0 else 0)
         }
         

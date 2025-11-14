@@ -39,7 +39,7 @@ if is_logged_in:
         st.write(f"Usuario: `{st.session_state.usuario}`")
         
         # Botón de Cerrar Sesión
-        if st.button("🚪 Cerrar Sesión", type="primary", use_container_width=True):
+        if st.button("🚪 Cerrar Sesión", type="primary", width='stretch'):
             sign_out() # Usar la función de Supabase Auth
             st.success("Sesión cerrada correctamente.")
             st.rerun()
@@ -115,7 +115,7 @@ if is_logged_in:
 
                 # 3. Botón de Enlace - SOLUCIÓN DEFINITIVA
                 # Usamos st.link_button que es más estable que st.page_link
-                if st.button(f"🚀 Ir a {p['titulo']}", key=f"btn_{p['key']}", use_container_width=True):
+                if st.button(f"🚀 Ir a {p['titulo']}", key=f"btn_{p['key']}", width='stretch'):
                     st.switch_page(p['pagina'])
 
 # --- 3. CONTENIDO PÚBLICO (USUARIO NO LOGUEADO) ---
@@ -132,7 +132,7 @@ else:
             email = st.text_input("Correo electrónico", key="login_email").strip().lower()
             password = st.text_input("Contraseña", type="password", key="login_password")
             
-            if st.form_submit_button("Ingresar", type="primary", use_container_width=True):
+            if st.form_submit_button("Ingresar", type="primary", width='stretch'):
                 if not email or not password:
                     st.error("⚠️ Por favor ingrese correo y contraseña.")
                 else:
@@ -148,7 +148,7 @@ else:
             password_reg = st.text_input("Contraseña (mínimo 6 caracteres)", type="password", key="reg_password")
             password_confirm = st.text_input("Confirmar Contraseña", type="password", key="reg_confirm")
             
-            if st.form_submit_button("Registrar", type="secondary", use_container_width=True):
+            if st.form_submit_button("Registrar", type="secondary", width='stretch'):
                 if not email_reg or not password_reg:
                     st.error("⚠️ Por favor ingrese correo y contraseña.")
                 elif password_reg != password_confirm:

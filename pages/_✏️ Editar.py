@@ -226,7 +226,7 @@ def editar_presupuesto_page():
     with st.form("save_edit_form"):
         st.markdown(f"**Total a Guardar:** **${total_general_actualizado:,.2f}**")
         
-        if st.form_submit_button("💾 Guardar Edición y Generar PDF", type="primary", use_container_width=True):
+        if st.form_submit_button("💾 Guardar Edición y Generar PDF", type="primary", width='stretch'):
             if not cliente_id_actualizado or not lugar_id_actualizado:
                 st.error("⚠️ Cliente o Lugar de Trabajo no válidos.")
             elif total_general_actualizado <= 0:
@@ -279,7 +279,7 @@ def editar_presupuesto_page():
                             pdf_bytes,
                             file_name=file_name,
                             mime="application/pdf",
-                            use_container_width=True
+                            width='stretch'
                         )
 
                         # 4. Limpiar estado y volver
