@@ -151,18 +151,28 @@ def generar_pdf(cliente_nombre: str, categorias: Dict[str, Any], lugar_cliente: 
                 # Ancho: 70 (Nombre) + 20 (Unidad) + 20 (Cant) + 30 (P.U.) + 30 (Total) = 170
 
                 # Guardar posición Y para el multicell
-                y_start = pdf.get_y()
-                
-                # 1. Nombre (MultiCell)
-                pdf.multi_cell(70, 5, nombre, 0, 'L', 0, 0, '', y_start) 
+                # Guardamos X y Y iniciales
+                x_inicio = pdf.get_x()
+                y_inicio = pdf.get_y()
 
-                # 2. Datos numéricos (Saltamos el espacio de 70)
-                pdf.set_xy(pdf.get_x() + 70, y_start)
+                # 1. Nombre (ocupa 70)
+                pdf.multi_cell(70, 5, nombre, 0, 'L')
+
+                # Guardamos nueva Y luego del multicell
+                y_after = pdf.get_y()
+
+                # Volvemos justo al inicio de la fila para escribir números
+                pdf.set_xy(x_inicio + 70, y_inicio)
+
+                # 2. Datos numéricos
                 pdf.cell(20, 5, unidad, 0, 0, 'C')
                 pdf.cell(20, 5, str(cantidad), 0, 0, 'C')
                 pdf.cell(30, 5, formato_moneda(precio_unitario), 0, 0, 'R')
                 pdf.cell(30, 5, formato_moneda(total_item), 0, 1, 'R')
-                
+
+                # Aseguramos que la siguiente línea no sobreescriba
+                pdf.set_y(max(y_after, pdf.get_y()))
+
                 # 3. Notas (Si existen)
                 if notas:
                     pdf.set_x(10) # Volver al margen izquierdo
