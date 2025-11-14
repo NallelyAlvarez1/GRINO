@@ -137,7 +137,7 @@ def show_cliente_lugar_selector() -> Tuple[Optional[int], str, Optional[int], st
         
     with col2:
         st.markdown("#### Lugar de Trabajo")
-        lugar_id = _selector_entidad(
+        lugar_trabajo_id = _selector_entidad(
             datos=lugares,
             label="lugar",
             key="lugar",
@@ -157,9 +157,9 @@ def show_cliente_lugar_selector() -> Tuple[Optional[int], str, Optional[int], st
                                    height=80)
     
     cliente_nombre = next((n for i, n in clientes if i == cliente_id), "(No Seleccionado)")
-    lugar_nombre = next((n for i, n in lugares if i == lugar_id), "(No Seleccionado)")
+    lugar_nombre = next((n for i, n in lugares if i == lugar_trabajo_id), "(No Seleccionado)")
     
-    return cliente_id, cliente_nombre, lugar_id, lugar_nombre, descripcion
+    return cliente_id, cliente_nombre, lugar_trabajo_id, lugar_nombre, descripcion
 
 # ==================== SECCIÓN ITEMS Y CATEGORÍAS ====================
 

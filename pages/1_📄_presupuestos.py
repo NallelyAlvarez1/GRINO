@@ -43,7 +43,7 @@ def main():
 
     # ========== SECCIÓN CLIENTE, LUGAR y TRABAJO A REALIZAR ==========
     st.subheader("Datos del Cliente", divider="blue")
-    cliente_id, cliente_nombre, lugar_id, lugar_nombre, descripcion = show_cliente_lugar_selector()
+    cliente_id, cliente_nombre, lugar_trabajo_id, lugar_nombre, descripcion = show_cliente_lugar_selector()
     st.session_state.descripcion = descripcion
 
     # ========== SECCIÓN ITEMS ==========
@@ -73,7 +73,7 @@ def main():
                 presupuesto_id = save_presupuesto_completo(
                     user_id=st.session_state.user_id,   # 1er argumento
                     cliente_id=cliente_id,              # 2do argumento
-                    lugar_trabajo_id=lugar_id,                  # 3er argumento
+                    lugar_trabajo_id=lugar_trabajo_id,                  # 3er argumento
                     descripcion=descripcion,            # 4to argumento
                     items_data=items_data,              # 5to argumento
                     total=total_general                 # 6to argumento
