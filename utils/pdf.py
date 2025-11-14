@@ -1,16 +1,13 @@
 import tempfile
 import os
-from fpdf import FPDF
 from datetime import datetime
+from typing import Optional, Tuple, Dict, Any
+from fpdf import FPDF
+from utils.database import get_presupuesto_detallado
 import streamlit as st
 
-
-# ============================================
-# FUNCIONES BÁSICAS — (Tomadas del Código A)
-# ============================================
-
-def safe_float_value(value):
-    """Convierte valores a float de forma segura."""
+# ========= UTILIDAD SEGURA ==========
+def safe_float(value):
     try:
         if value is None:
             return 0.0
@@ -18,230 +15,183 @@ def safe_float_value(value):
     except:
         return 0.0
 
-
+# ========= FORMATO MONEDA ==========
 def formato_moneda(valor: float) -> str:
-    """Formatea valores como $12.345."""
     return f"${int(round(valor)):,}".replace(",", ".")
     
 
-# ============================================
-#   GENERAR PDF — Estilo moderno (Código B)
-# ============================================
-
-def generar_pdf(cliente: str, lugar: str, categorias: dict, descripcion: str = ""):
+# ========= GENERAR PDF (CÓDIGO B BASE) ==========
+def generar_pdf(cliente_nombre: str, lugar_cliente: str, descripcion: str, categorias: Dict[str, Any]) -> str:
     try:
         pdf = FPDF()
         pdf.add_page()
-
-        # Mejor espaciado estándar
         pdf.set_auto_page_break(auto=True, margin=15)
-        pdf.set_line_width(0.4)
+        
+        # Franja verde superior
+        pdf.set_fill_color(0, 102, 51)
+        pdf.rect(0, 0, 210, 20, 'F')
 
-        # ============================
-        # BARRA VERDE SUPERIOR
-        # ============================
-        pdf.set_fill_color(57, 181, 74)
-        pdf.rect(0, 0, 220, 40, "F")
+        # Título principal
+        pdf.set_xy(10, 25)
+        pdf.set_font('Helvetica', 'B', 17)
+        pdf.cell(0, 10, 'PRESUPUESTO DE TRABAJO', 0, 1, 'L')
 
-        # TÍTULO EN BARRA VERDE
-        pdf.set_font("Helvetica", "B", 23)
-        pdf.set_text_color(255, 255, 255)
-        pdf.set_xy(10, 8)
-        pdf.cell(0, 10, "PRESUPUESTO", 0, 1, "L")
+        # Datos del cliente
+        pdf.ln(3)
+        pdf.set_font('Helvetica', '', 11)
 
-        # SUBTÍTULO FECHA
-        pdf.set_font("Helvetica", "", 11)
-        pdf.set_xy(10, 20)
-        fecha = datetime.now().strftime("%d/%m/%Y")
-        pdf.cell(0, 10, f"Fecha: {fecha}", 0, 1, "L")
+        pdf.cell(50, 8, 'Cliente:', 0, 0)
+        pdf.cell(0, 8, cliente_nombre, 0, 1)
 
-        # ============================
-        # BARRA VERDE 2
-        # ============================
-        pdf.set_fill_color(31, 183, 38)
-        pdf.rect(0, 40, 220, 10, "F")
+        pdf.cell(50, 8, 'Lugar de Trabajo:', 0, 0)
+        pdf.cell(0, 8, lugar_cliente, 0, 1)
 
-        # TITULO NEGRO
-        pdf.set_text_color(0, 0, 0)
-        pdf.set_xy(10, 53)
-        pdf.set_font("Helvetica", "B", 20)
-        pdf.cell(0, 10, "Presupuesto de Jardines Jhonny Alvarez", 0, 1, "L")
-
-        # ============================
-        # DATOS CLIENTE
-        # ============================
-        pdf.set_font("Helvetica", "B", 16)
-        pdf.set_xy(10, 75)
-        pdf.cell(0, 10, "Tu Cliente:", 0, 1, "L")
-
-        pdf.set_font("Helvetica", "", 14)
-        pdf.set_xy(10, 90)
-        pdf.multi_cell(0, 7, f"Cliente: {cliente}")
-
-        pdf.set_xy(10, 110)
-        pdf.multi_cell(0, 7, f"Lugar de Trabajo: {lugar}")
+        pdf.cell(50, 8, 'Fecha:', 0, 0)
+        pdf.cell(0, 8, datetime.now().strftime('%d/%m/%Y'), 0, 1)
 
         if descripcion:
-            pdf.set_xy(10, 125)
-            pdf.multi_cell(0, 7, f"Descripción del Trabajo: {descripcion}")
+            pdf.ln(4)
+            pdf.set_font('Helvetica', 'B', 11)
+            pdf.cell(0, 8, 'Descripción del Trabajo:', 0, 1)
+            pdf.set_font('Helvetica', '', 10)
+            pdf.multi_cell(0, 6, descripcion)
 
-        pdf.ln(5)
-
-        # ============================================
-        #          TABLAS POR CATEGORÍA
-        # ============================================
+        pdf.ln(6)
 
         total_general = 0.0
 
-        for nombre_cat, data in categorias.items():
-
+        # Recorrer categorías
+        for nombre_categoria, data in categorias.items():
+            
             items = data.get("items", [])
-            mo_categoria = safe_float_value(data.get("mano_obra", 0))
+            mano_obra = safe_float(data.get("mano_obra", 0))
 
-            # Si no hay nada, saltar
-            if not items and mo_categoria == 0:
+            # Saltar categorías vacías
+            if not items and mano_obra == 0:
                 continue
 
-            # TITULO DE CATEGORÍA
-            pdf.set_font("Helvetica", "B", 15)
-            pdf.set_fill_color(200, 200, 200)
-            pdf.cell(0, 10, nombre_cat.upper(), 0, 1, "L")
+            # Bloque categoría
+            pdf.set_font('Helvetica', 'B', 13)
+            pdf.set_fill_color(220, 220, 220)
+            pdf.cell(0, 9, nombre_categoria.upper(), 0, 1, 'L', 1)
 
             # Encabezado tabla
-            pdf.set_font("Helvetica", "B", 11)
-            pdf.cell(80, 8, "Descripción", 1)
-            pdf.cell(20, 8, "Unidad", 1, 0, "C")
-            pdf.cell(20, 8, "Cant.", 1, 0, "C")
-            pdf.cell(35, 8, "P. Unitario", 1, 0, "R")
-            pdf.cell(35, 8, "Total", 1, 1, "R")
+            pdf.set_font('Helvetica', 'B', 10)
+            pdf.cell(85, 7, 'Descripción', 1, 0, 'L')
+            pdf.cell(25, 7, 'Unidad', 1, 0, 'C')
+            pdf.cell(20, 7, 'Cant.', 1, 0, 'C')
+            pdf.cell(30, 7, 'P. Unitario', 1, 0, 'R')
+            pdf.cell(30, 7, 'Total', 1, 1, 'R')
 
-            pdf.set_font("Helvetica", "", 10)
-
-            total_cat = 0
+            # Items
+            pdf.set_font('Helvetica', '', 10)
+            total_categoria = 0
 
             for item in items:
-                nombre = item.get("nombre", "")
-                unidad = item.get("unidad", "")
-                cantidad = safe_float_value(item.get("cantidad"))
-                precio_unit = safe_float_value(item.get("precio_unitario"))
-                total_item = safe_float_value(item.get("total"))
-                nota = item.get("descripcion", "")
+                nombre = item.get('nombre', '')
+                unidad = item.get('unidad', '')
+                cantidad = safe_float(item.get('cantidad', 0))
+                precio_unitario = safe_float(item.get('precio_unitario', 0))
+                total_item = safe_float(item.get('total', cantidad * precio_unitario))
 
-                total_cat += total_item
+                total_categoria += total_item
 
-                # Nombre (MultiCell)
-                y1 = pdf.get_y()
-                pdf.multi_cell(80, 6, nombre, 1, "L")
-                y2 = pdf.get_y()
-                altura = y2 - y1
+                pdf.multi_cell(85, 6, nombre, 1, 'L')
+                y = pdf.get_y()
+                pdf.set_xy(95, y - 6)
+                pdf.cell(25, 6, unidad, 1, 0, 'C')
+                pdf.cell(20, 6, str(int(cantidad)), 1, 0, 'C')
+                pdf.cell(30, 6, formato_moneda(precio_unitario), 1, 0, 'R')
+                pdf.cell(30, 6, formato_moneda(total_item), 1, 1, 'R')
 
-                # Mover items extras
-                pdf.set_xy(10 + 80, y1)
-                pdf.cell(20, altura, unidad, 1, 0, "C")
-                pdf.cell(20, altura, str(cantidad), 1, 0, "C")
-                pdf.cell(35, altura, formato_moneda(precio_unit), 1, 0, "R")
-                pdf.cell(35, altura, formato_moneda(total_item), 1, 1, "R")
-
-                # Nota
-                if nota:
-                    pdf.set_font("Helvetica", "I", 9)
-                    pdf.multi_cell(0, 5, f"Nota: {nota}")
-                    pdf.set_font("Helvetica", "", 10)
-
-            # Mano de obra categoría
-            if mo_categoria > 0:
-                total_cat += mo_categoria
-                pdf.set_font("Helvetica", "B", 11)
-                pdf.cell(155, 8, "Mano de obra", 1, 0, "R")
-                pdf.cell(35, 8, formato_moneda(mo_categoria), 1, 1, "R")
+            # Mano de obra por categoría
+            if mano_obra > 0:
+                total_categoria += mano_obra
+                pdf.set_font('Helvetica', 'B', 10)
+                pdf.cell(160, 7, f"Mano de Obra ({nombre_categoria})", 1, 0, 'R')
+                pdf.cell(30, 7, formato_moneda(mano_obra), 1, 1, 'R')
 
             # Total categoría
-            pdf.set_font("Helvetica", "B", 12)
-            pdf.cell(155, 10, f"TOTAL {nombre_cat.upper()}", 1, 0, "R")
-            pdf.cell(35, 10, formato_moneda(total_cat), 1, 1, "R")
+            pdf.set_font('Helvetica', 'B', 11)
+            pdf.cell(160, 8, f"TOTAL {nombre_categoria.upper()}", 1, 0, 'R')
+            pdf.cell(30, 8, formato_moneda(total_categoria), 1, 1, 'R')
 
-            pdf.ln(4)
+            pdf.ln(3)
+            total_general += total_categoria
 
-            total_general += total_cat
-
-        # ============================
         # TOTAL GENERAL
-        # ============================
-        pdf.set_fill_color(57, 181, 74)
-        pdf.set_font("Helvetica", "B", 17)
-        pdf.set_text_color(0, 0, 0)
-        pdf.cell(155, 12, "TOTAL PRESUPUESTO", 1, 0, "R", 1)
-        pdf.cell(35, 12, formato_moneda(total_general), 1, 1, "R", 1)
+        pdf.set_fill_color(0, 140, 70)
+        pdf.set_font('Helvetica', 'B', 15)
+        pdf.cell(160, 10, 'TOTAL PRESUPUESTO', 1, 0, 'R', True)
+        pdf.cell(30, 10, formato_moneda(total_general), 1, 1, 'R')
 
-        # Guardar PDF temporal
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        # Guardar temporal
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
             pdf.output(tmp.name)
             return tmp.name
 
     except Exception as e:
         st.error(f"Error generando PDF: {e}")
+        print("PDF ERROR:", e)
         return ""
-    
 
-# ============================================
-#      FUNCIÓN DE INTEGRACIÓN STREAMLIT
-# ============================================
-
-def mostrar_boton_descarga_pdf(presupuesto_id: int, presupuesto):
-    """
-    Recibe el presupuesto ya consultado desde la BD y genera el PDF moderno.
-    """
+def mostrar_boton_descarga_pdf(presupuesto_id: int):
     try:
+        data = get_presupuesto_detallado(presupuesto_id)
+        if not data:
+            return None, None, False
+
         categorias = {}
 
-        for item in presupuesto.get("items", []):
-            cat = item.get("categoria", "General") or "General"
+        for item in data.get("items", []):
+            categoria = item.get("categoria", "Sin Categoría") or "Sin Categoría"
 
-            if cat not in categorias:
-                categorias[cat] = {"items": [], "mano_obra": 0}
+            if categoria not in categorias:
+                categorias[categoria] = {"items": [], "mano_obra": 0}
 
-            nombre = item.get("nombre", "").lower()
+            nombre_item = item.get("nombre", "").lower()
 
             # Mano de obra general
-            if "mano de obra general" in nombre:
-                categorias.setdefault("General", {"items": [], "mano_obra": 0})
-                categorias["General"]["mano_obra"] += safe_float_value(item.get("precio_unitario"))
+            if "mano de obra general" in nombre_item:
+                if "Mano de Obra General" not in categorias:
+                    categorias["Mano de Obra General"] = {"items": [], "mano_obra": 0}
+                categorias["Mano de Obra General"]["mano_obra"] += safe_float(item.get("precio_unitario"))
                 continue
 
             # Mano de obra categoría
-            if "mano de obra" in nombre:
-                categorias[cat]["mano_obra"] += safe_float_value(item.get("total"))
+            if "mano de obra" in nombre_item:
+                categorias[categoria]["mano_obra"] += safe_float(item.get("total"))
                 continue
 
             # Item normal
-            categorias[cat]["items"].append({
-                "nombre": item.get("nombre", ""),
-                "unidad": item.get("unidad", "Unidad"),
-                "cantidad": safe_float_value(item.get("cantidad")),
-                "precio_unitario": safe_float_value(item.get("precio_unitario")),
-                "total": safe_float_value(item.get("total")),
+            categorias[categoria]["items"].append({
+                "nombre": item.get("nombre"),
+                "unidad": item.get("unidad"),
+                "cantidad": safe_float(item.get("cantidad")),
+                "precio_unitario": safe_float(item.get("precio_unitario")),
+                "total": safe_float(item.get("total")),
                 "descripcion": item.get("notas", "")
             })
 
         pdf_path = generar_pdf(
-            presupuesto["cliente"]["nombre"],
-            presupuesto["lugar"]["nombre"],
-            categorias,
-            presupuesto.get("descripcion", ""),
+            cliente_nombre=data["cliente"]["nombre"],
+            lugar_cliente=data["lugar"]["nombre"],
+            descripcion=data.get("descripcion", ""),
+            categorias=categorias
         )
 
         if not pdf_path:
             return None, None, False
 
         with open(pdf_path, "rb") as f:
-            pdf_bytes = f.read()
+            contenido_pdf = f.read()
 
         os.unlink(pdf_path)
 
-        nombre_archivo = f"Presupuesto_{presupuesto_id}.pdf"
+        nombre_archivo = f"Presupuesto_{data['lugar']['nombre'].replace(' ','_')}_{presupuesto_id}.pdf"
 
-        return pdf_bytes, nombre_archivo, True
+        return contenido_pdf, nombre_archivo, True
 
     except Exception as e:
-        st.error(f"Error final: {e}")
+        print("DESCARGA ERROR:", e)
         return None, None, False
