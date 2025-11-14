@@ -394,8 +394,8 @@ def show_mano_obra():
     st.session_state['categorias']['general']['mano_obra'] = st.number_input(
         "Mano de Obra General (valor único para el trabajo completo)",
         value=safe_numeric_value(st.session_state['categorias']['general'].get('mano_obra', 0)),
-        min_value=0,
-        step=1,
+        min_value=0.0,
+        step=1000.0,
         key="mo_general"
     )
 
@@ -422,3 +422,68 @@ def show_mano_obra():
             step=1,
             key=f"mo_cat_{cat_nombre}"
         )
+
+def show_resumen():
+    """Muestra el resumen final del presupuesto."""
+    st.subheader("Resumen del Presupuesto", divider="green")
+    
+    if 'categorias' not in st.session_state or not st.session_state['categorias']:
+        st.info("📭 Comience agregando ítems y mano de obra para ver el resumen.")
+        return
+
+    # Usar una lista para el resumen de categorías
+    resumen_data = []
+    total_general = 0
+
+    # 1. Mano de Obra General
+    mano_obra_general = safe_numeric_value(st.session_state['categorias']['general'].get('mano_obra', 0.0))
+    total_general += mano_obra_general
+    
+    if mano_obra_general > 0:
+         resumen_data.append({
+             'Categoría': 'Mano de Obra General',
+             'Total Ítems': 0,
+             'Mano de Obra': mano_obra_general,
+             'Total Categoría': mano_obra_general
+         })
+
+    # 2. Ítems por Categoría
+    for cat, data in st.session_state['categorias'].items():
+        if cat == 'general': 
+            continue
+            
+        items_total = sum(safe_numeric_value(item.get('total')) for item in data['items'])
+        mano_obra = safe_numeric_value(data.get('mano_obra', 0))
+        total_categoria = items_total + mano_obra
+        total_general += total_categoria
+
+        if total_categoria > 0:
+            resumen_data.append({
+                'Categoría': cat,
+                'Total Ítems': items_total,
+                'Mano de Obra': mano_obra,
+                'Total Categoría': total_categoria
+            })
+            
+    if not resumen_data:
+        st.info("📭 El presupuesto está vacío.")
+        return
+
+    # Mostrar resumen en DataFrame
+    df_resumen = pd.DataFrame(resumen_data)
+    
+    st.dataframe(
+        df_resumen,
+        column_config={
+            "Categoría": "Categoría",
+            "Total Ítems": st.column_config.NumberColumn("Total Ítems", format="$%d"),
+            "Mano de Obra": st.column_config.NumberColumn("Mano de Obra", format="$%d"),
+            "Total Categoría": st.column_config.NumberColumn("Total", format="$%d")
+        },
+        hide_index=True,
+        width="stretch"
+    )
+    
+    st.markdown(f"#### 💰 **TOTAL GENERAL DEL PRESUPUESTO:** **${total_general:,.0f}**")
+    
+    return total_general
