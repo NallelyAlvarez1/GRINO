@@ -156,7 +156,7 @@ def save_presupuesto_completo(user_id, cliente_id, lugar_id, descripcion, items_
         response = supabase.table("presupuestos").insert({
             "user_id": user_id,
             "cliente_id": cliente_id,
-            "lugar_id": lugar_id,
+            "lugar_trabajo_id": lugar_id,
             "descripcion": descripcion,
             "total": total
         }).execute()

@@ -73,7 +73,7 @@ def main():
                 presupuesto_id = save_presupuesto_completo(
                     user_id=st.session_state.user_id,   # 1er argumento
                     cliente_id=cliente_id,              # 2do argumento
-                    lugar_id=lugar_id,                  # 3er argumento
+                    lugar_trabajo_id=lugar_id,                  # 3er argumento
                     descripcion=descripcion,            # 4to argumento
                     items_data=items_data,              # 5to argumento
                     total=total_general                 # 6to argumento
