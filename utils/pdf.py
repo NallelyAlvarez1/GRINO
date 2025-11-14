@@ -5,18 +5,29 @@ from datetime import datetime
 from fpdf import FPDF
 from database import save_presupuesto_completo, get_presupuesto_detallado
 
-def capitalizar(texto):
-    return texto.capitalize()
+# ==================== UTILIDADES ====================
+def capitalizar(texto: str) -> str:
+    return texto.capitalize() if texto else ""
 
-def formato_moneda(valor):
-    return f"${valor:,.0f}".replace(",", ".")
+def safe_float(value):
+    """Convierte cualquier valor a float seguro, usando 0 si es None o error"""
+    try:
+        if value is None:
+            return 0.0
+        return float(value)
+    except:
+        return 0.0
 
-# Datos constantes
+def formato_moneda(valor) -> str:
+    return f"${int(round(valor)):,}".replace(",", ".")
+
+# ==================== DATOS CONSTANTES ====================
 EMPRESA = "Presupuesto Jardines Alvarez"
 CONTACTO_NOMBRE = "Jhonny Nicolas Alvarez"
 CONTACTO_TELEFONO = "+569 6904 2513"
 CONTACTO_EMAIL = "jhonnynicolasalvarez@gmail.com"
 
+# ==================== GENERAR PDF ====================
 def generar_pdf(cliente_nombre, categorias, lugar_cliente):
     pdf = FPDF()
     pdf.add_page()
@@ -47,11 +58,14 @@ def generar_pdf(cliente_nombre, categorias, lugar_cliente):
     # Presupuesto por categoría
     total_general = 0
     for categoria, data in categorias.items():
-        items = data['items']
-        mano_obra = data.get('mano_obra', 0)
+        items = data.get('items', [])
+        mano_obra = safe_float(data.get('mano_obra', 0))
+
+        if not items and mano_obra == 0:
+            continue
 
         pdf.set_font("Arial", style='B', size=11)
-        pdf.cell(200, 6, capitalizar(f"{categoria}"), ln=True)
+        pdf.cell(200, 6, capitalizar(categoria), ln=True)
         pdf.set_font("Arial", style='B', size=11)
         pdf.cell(60, 6, capitalizar("Nombre"), border=1)
         pdf.cell(40, 6, capitalizar("Unidad"), border=1)
@@ -62,12 +76,15 @@ def generar_pdf(cliente_nombre, categorias, lugar_cliente):
         total_categoria = 0
         for item in items:
             pdf.set_font("Arial", size=11)
+            cantidad = safe_float(item['cantidad'])
+            precio_unitario = safe_float(item['precio_unitario'])
+            total_item = safe_float(item['total'])
             pdf.cell(60, 6, capitalizar(item['nombre']), border=1)
             pdf.cell(40, 6, capitalizar(item['unidad']), border=1)
-            pdf.cell(30, 6, formato_moneda(item['precio_unitario']), border=1)
-            pdf.cell(30, 6, str(item['cantidad']), border=1)
-            pdf.cell(30, 6, formato_moneda(item['total']), border=1, ln=True)
-            total_categoria += item['total']
+            pdf.cell(30, 6, formato_moneda(precio_unitario), border=1)
+            pdf.cell(30, 6, str(int(cantidad)), border=1)
+            pdf.cell(30, 6, formato_moneda(total_item), border=1, ln=True)
+            total_categoria += total_item
 
         if mano_obra > 0:
             pdf.cell(160, 6, capitalizar("Mano de Obra"), border=1)
@@ -88,29 +105,29 @@ def generar_pdf(cliente_nombre, categorias, lugar_cliente):
 
     return pdf
 
+# ==================== GUARDAR PRESUPUESTO Y PDF ====================
 def guardar_presupuesto_completo(presupuesto_id: int, categorias: dict, cliente_nombre: str, lugar_nombre: str):
     """Guarda el presupuesto en la base de datos y genera el PDF"""
     try:
-        # 1. Guardar en la base de datos
+        # Guardar en DB
         save_presupuesto_completo(presupuesto_id, categorias)
         
-        # 2. Generar PDF
+        # Generar PDF
         pdf = generar_pdf(cliente_nombre, categorias, lugar_nombre)
         
-        # 3. Crear archivo temporal para el PDF
+        # Guardar PDF en temp y convertir a base64
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmpfile:
             pdf.output(tmpfile.name)
             tmpfile.seek(0)
             pdf_bytes = tmpfile.read()
         
-        # 4. Convertir a base64 para descarga
         b64 = base64.b64encode(pdf_bytes).decode()
         href = f'<a href="data:application/octet-stream;base64,{b64}" download="presupuesto_{presupuesto_id}.pdf">⬇️ Descargar PDF</a>'
-        
         return href, True
     except Exception as e:
         return f"Error al guardar: {str(e)}", False
 
+# ==================== DESCARGA PRESUPUESTO ====================
 def mostrar_boton_descarga_pdf(presupuesto_id: int):
     """Muestra el botón para descargar un presupuesto existente"""
     presupuesto = get_presupuesto_detallado(presupuesto_id)
@@ -119,19 +136,19 @@ def mostrar_boton_descarga_pdf(presupuesto_id: int):
     
     categorias = {}
     for item in presupuesto['items']:
-        cat_nombre = item['categoria'] or 'Sin categoría'
+        cat_nombre = item.get('categoria') or 'Sin categoría'
         if cat_nombre not in categorias:
             categorias[cat_nombre] = {'items': [], 'mano_obra': 0}
         
-        if item['nombre'] == 'Mano de Obra':
-            categorias[cat_nombre]['mano_obra'] = item['precio_unitario']
+        if item['nombre'].lower() == 'mano de obra':
+            categorias[cat_nombre]['mano_obra'] = safe_float(item['precio_unitario'])
         else:
             categorias[cat_nombre]['items'].append({
                 'nombre': item['nombre'],
                 'unidad': item['unidad'],
-                'cantidad': item['cantidad'],
-                'precio_unitario': item['precio_unitario'],
-                'total': item['total']
+                'cantidad': safe_float(item['cantidad']),
+                'precio_unitario': safe_float(item['precio_unitario']),
+                'total': safe_float(item['total'])
             })
     
     pdf = generar_pdf(
@@ -150,12 +167,8 @@ def mostrar_boton_descarga_pdf(presupuesto_id: int):
     
     return href, True
 
+# ==================== OBTENER PDF EN BYTES ====================
 def get_pdf_bytes(presupuesto_id: int) -> bytes:
-    """
-    Obtiene los bytes del PDF ya generado para un presupuesto
-    Implementa según cómo almacenes los PDFs (filesystem/S3/base de datos)
-    """
-    # Ejemplo para PDFs guardados en filesystem:
     pdf_path = f"presupuestos/presupuesto_{presupuesto_id}.pdf"
     if os.path.exists(pdf_path):
         with open(pdf_path, "rb") as f:
