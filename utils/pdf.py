@@ -28,7 +28,7 @@ CONTACTO_TELEFONO = "+569 6904 2513"
 CONTACTO_EMAIL = "jhonnynicolasalvarez@gmail.com"
 
 # ==================== GENERAR PDF ====================
-def generar_pdf(cliente_nombre, categorias, lugar_cliente):
+def generar_pdf(cliente_nombre, categorias, lugar_cliente, descripcion=""):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", size=11)
