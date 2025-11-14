@@ -9,10 +9,9 @@ from utils.database import (
     get_lugares_trabajo, 
     create_lugar_trabajo
 )
-from utils.db import get_supabase_client  # ← AGREGAR ESTA IMPORTACIÓN
+from utils.db import get_supabase_client
 
 # ==================== INICIALIZACIÓN DE CLIENTE SUPABASE ====================
-# Inicializar el cliente de Supabase una sola vez
 try:
     supabase = get_supabase_client()
 except Exception as e:
@@ -21,37 +20,37 @@ except Exception as e:
 
 # ==================== UTILIDADES ====================
 def safe_numeric_value(value: Any) -> float:
-    """
-    Convierte un valor a float de forma segura, 
-    manejando None, cadenas y errores de conversión.
-    """
+    """Convierte un valor a float de forma segura"""
     if value is None:
         return 0.0
     try:
-        # Se asegura de que se convierta a float para mantener decimales si existen
         return float(value)
     except (TypeError, ValueError):
         return 0.0
 
+def clean_integer_input(value: str) -> int:
+    """Limpia el input para que solo contenga números enteros"""
+    if value is None:
+        return 0
+    # Remover todo excepto números
+    cleaned = ''.join(filter(str.isdigit, str(value)))
+    return int(cleaned) if cleaned else 0
+
 # ==================== SECCION CLIENTE - LUGAR DE TRABAJO ====================
 
 def _selector_entidad(datos: List[Tuple[int, str]], label: str, key: str, btn_nuevo: str, modal_title: str, placeholder_nombre: str, funcion_creacion: callable, label_visibility: str) -> Optional[int]:
-    # Asegurar que tenemos user_id
     user_id = st.session_state.get('user_id')
     if not user_id:
         st.error("❌ No se pudo obtener el ID de usuario")
         return None
     
-    # Verificar conexión a Supabase
     if supabase is None:
         st.error("❌ No hay conexión a la base de datos")
         return None
     
-    # Asegura que el cliente/lugar 'Ninguno' se maneje
     opciones_display = ["(Seleccione)"] + [nombre for _, nombre in datos]
     opciones_ids = [None] + [id for id, _ in datos]
     
-    # 1. Selector de entidad existente
     entidad_nombre_seleccionada = st.selectbox(
         label=label.capitalize(),
         options=opciones_display,
@@ -59,21 +58,16 @@ def _selector_entidad(datos: List[Tuple[int, str]], label: str, key: str, btn_nu
         label_visibility=label_visibility,
     )
     
-    # 2. Obtener el ID seleccionado
     entidad_id = None
     if entidad_nombre_seleccionada and entidad_nombre_seleccionada != "(Seleccione)":
         try:
-            # Buscar el ID basado en el nombre
             entidad_id = next((id for id, nombre in datos if nombre == entidad_nombre_seleccionada), None)
         except StopIteration:
-            # Esto no debería ocurrir si las listas están sincronizadas
             entidad_id = None
             
-    # 3. Botón para crear nueva entidad
     if st.button(btn_nuevo, key=f"{key}_new_btn", use_container_width=True):
         st.session_state[f'{key}_modal_open'] = True
     
-    # 4. Modal de creación (usando expander para simular modal)
     if st.session_state.get(f'{key}_modal_open', False):
         st.subheader(modal_title, divider='blue')
         with st.form(key=f"form_new_{key}", border=True):
@@ -88,7 +82,6 @@ def _selector_entidad(datos: List[Tuple[int, str]], label: str, key: str, btn_nu
                             if new_id:
                                 st.session_state[f'{key}_modal_open'] = False
                                 st.session_state[f'{key}_selector'] = nombre_nuevo.strip()
-                                # Limpiar el caché de clientes para forzar la recarga
                                 if key == 'cliente' and 'cliente_data' in st.session_state:
                                     del st.session_state['cliente_data']
                                 st.rerun()
@@ -110,21 +103,18 @@ def show_cliente_lugar_selector() -> Tuple[Optional[int], str, Optional[int], st
         st.error("❌ No has iniciado sesión")
         st.stop()
 
-    # Verificar conexión a Supabase
     if supabase is None:
         st.error("❌ No hay conexión a la base de datos. No se pueden cargar clientes y lugares.")
         return None, "", None, "", ""
 
     try:
-        # OBTENER EL USER_ID DE LA SESIÓN
         user_id = st.session_state.user_id
         
-        # PASAR user_id A LAS FUNCIONES
         if "cliente_data" not in st.session_state:
-            st.session_state["cliente_data"] = get_clientes(user_id)  # ← PASA user_id AQUÍ
+            st.session_state["cliente_data"] = get_clientes(user_id)
         
         clientes = st.session_state["cliente_data"]
-        lugares = get_lugares_trabajo(user_id)  # ← PASA user_id AQUÍ
+        lugares = get_lugares_trabajo(user_id)
         
     except Exception as e:
         st.error(f"❌ Error cargando datos: {e}")
@@ -166,17 +156,14 @@ def show_cliente_lugar_selector() -> Tuple[Optional[int], str, Optional[int], st
                                    label_visibility="collapsed",
                                    height=80)
     
-    # Obtener nombres de forma segura
     cliente_nombre = next((n for i, n in clientes if i == cliente_id), "(No Seleccionado)")
     lugar_nombre = next((n for i, n in lugares if i == lugar_id), "(No Seleccionado)")
     
-    # ⚠️ Retorna los IDs y los nombres
     return cliente_id, cliente_nombre, lugar_id, lugar_nombre, descripcion
 
 # ==================== SECCIÓN ITEMS Y CATEGORÍAS ====================
 
 def selector_categoria(mostrar_label: bool = True, requerido: bool = True, key_suffix: str = "") -> Tuple[Optional[int], Optional[str]]:
-    """Selector de categorías con capacidad para crear nuevas (usando _selector_entidad)"""
     if 'user_id' not in st.session_state:
         st.error("❌ No autenticado")
         st.stop()
@@ -215,7 +202,6 @@ def show_items_presupuesto() -> Dict[str, Any]:
     if 'categorias' not in st.session_state:
         st.session_state['categorias'] = {'general': {'items': [], 'mano_obra': 0}}
 
-    # ========== SECCIÓN CATEGORIA E ITEMS ==========    
     with st.container(border=True):
         col1, col2 = st.columns([2, 4])
         
@@ -237,7 +223,10 @@ def show_items_presupuesto() -> Dict[str, Any]:
             with col_cantidad:
                 cantidad = st.number_input("Cantidad:", min_value=0, value=0, step=1, key="cantidad_principal")
             with col_precio:
-                precio_unitario = st.number_input("Precio Unitario ($):", min_value=0, value=0, step=1, key="precio_principal")
+                # INPUT DE PRECIO SIN DECIMALES - SOLO ENTEROS
+                precio_input = st.text_input("Precio Unitario ($):", value="0", key="precio_principal")
+                # Limpiar el input para que solo tenga números enteros
+                precio_unitario = clean_integer_input(precio_input)
 
             # Segunda fila de inputs
             col_unidad, col_total, col_boton = st.columns(3)
@@ -249,7 +238,7 @@ def show_items_presupuesto() -> Dict[str, Any]:
                 )
             with col_total:
                 total = cantidad * precio_unitario
-                st.text_input("Total", value=f"${total:,.2f}", disabled=True)
+                st.text_input("Total", value=f"${total:,}", disabled=True)
             with col_boton:
                 st.write("")
                 st.write("")
@@ -275,7 +264,7 @@ def show_items_presupuesto() -> Dict[str, Any]:
                                 'precio_unitario': precio_unitario,
                                 'total': total,
                                 'categoria': categoria_nombre,
-                                'notas': ''  # Campo notas agregado
+                                'notas': ''
                             })
                             st.success(f"Ítem agregado a '{categoria_nombre}'")
     
@@ -331,19 +320,21 @@ def show_items_presupuesto() -> Dict[str, Any]:
                         label_visibility="collapsed"
                     )
                 with col4:
-                    nuevo_precio = st.number_input(
+                    # INPUT DE PRECIO EN EDICIÓN - SOLO ENTEROS
+                    precio_actual = str(item['precio_unitario'])
+                    nuevo_precio_input = st.text_input(
                         "Precio", 
-                        min_value=0, 
-                        value=item['precio_unitario'],
-                        step=1,
+                        value=precio_actual,
                         key=f"precio_{cat_nombre}_{index}", 
                         label_visibility="collapsed"
                     )
+                    nuevo_precio = clean_integer_input(nuevo_precio_input)
+                    
                 with col5:
                     nuevo_total = nueva_cantidad * nuevo_precio
                     st.text_input(
                         "Total", 
-                        value=f"${nuevo_total:,.2f}", 
+                        value=f"${nuevo_total:,}", 
                         disabled=True, 
                         key=f"total_{cat_nombre}_{index}", 
                         label_visibility="collapsed"
@@ -383,25 +374,24 @@ def show_mano_obra():
     """Muestra el input para mano de obra general y por categoría."""
     st.subheader("Mano de Obra", divider="blue")
     
-    # Aseguramos la existencia de la clave
     if 'categorias' not in st.session_state:
         st.session_state['categorias'] = {'general': {'items': [], 'mano_obra': 0}}
         
     if 'general' not in st.session_state['categorias']:
         st.session_state['categorias']['general'] = {'items': [], 'mano_obra': 0}
         
-    # 1. Mano de Obra General
-    st.session_state['categorias']['general']['mano_obra'] = st.number_input(
+    # 1. Mano de Obra General - SOLO ENTEROS
+    st.markdown("##### Mano de Obra General")
+    mano_obra_input = st.text_input(
         "Mano de Obra General (valor único para el trabajo completo)",
-        value=safe_numeric_value(st.session_state['categorias']['general'].get('mano_obra', 0)),
-        min_value=0.0,
-        step=1000.0,
-        key="mo_general"
+        value=str(int(st.session_state['categorias']['general'].get('mano_obra', 0))),
+        key="mo_general_input"
     )
+    st.session_state['categorias']['general']['mano_obra'] = clean_integer_input(mano_obra_input)
 
     st.markdown("---")
     
-    # 2. Mano de Obra por Categoría (para categorías con ítems)
+    # 2. Mano de Obra por Categoría - SOLO ENTEROS
     st.markdown("##### Mano de Obra por Categoría (Adicional)")
     
     categorias_a_mostrar = [cat for cat in st.session_state['categorias'] if cat != 'general' and st.session_state['categorias'][cat]['items']]
@@ -411,17 +401,15 @@ def show_mano_obra():
         return
         
     for cat_nombre in categorias_a_mostrar:
-        # Aseguramos la inicialización de 'mano_obra'
         if 'mano_obra' not in st.session_state['categorias'][cat_nombre]:
              st.session_state['categorias'][cat_nombre]['mano_obra'] = 0
              
-        st.session_state['categorias'][cat_nombre]['mano_obra'] = st.number_input(
+        mano_obra_cat_input = st.text_input(
             f"Mano de Obra para: {cat_nombre}",
-            value=safe_numeric_value(st.session_state['categorias'][cat_nombre].get('mano_obra', 0)),
-            min_value=0,
-            step=1,
-            key=f"mo_cat_{cat_nombre}"
+            value=str(int(st.session_state['categorias'][cat_nombre].get('mano_obra', 0))),
+            key=f"mo_cat_{cat_nombre}_input"
         )
+        st.session_state['categorias'][cat_nombre]['mano_obra'] = clean_integer_input(mano_obra_cat_input)
 
 def show_resumen():
     """Muestra el resumen final del presupuesto."""
@@ -431,7 +419,6 @@ def show_resumen():
         st.info("📭 Comience agregando ítems y mano de obra para ver el resumen.")
         return
 
-    # Usar una lista para el resumen de categorías
     resumen_data = []
     total_general = 0
 
