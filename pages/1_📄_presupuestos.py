@@ -63,7 +63,7 @@ def main():
     show_resumen(items_data)
 
     # ========== GUARDADO ==========
-    total_general = show_resumen(items_data)
+    total_general = calcular_total(items_data)
     
     if st.button("📂 Guardar Presupuesto Completo", type="primary",
                 help="Revise todos los datos antes de guardar"):
