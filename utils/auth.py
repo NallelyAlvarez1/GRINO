@@ -6,28 +6,21 @@ def check_login() -> bool:
     return 'user_id' in st.session_state and st.session_state.user_id is not None
 
 def authenticate(email: str, password: str) -> bool:
-    """Autentica credenciales usando Supabase Auth."""
+    """Autentica credenciales usando Supabase Auth (email/password)."""
     supabase = get_supabase_client()
     try:
-        response = supabase.auth.sign_in_with_password({
-            "email": email.strip().lower(), 
-            "password": password
-        })
+        response = supabase.auth.sign_in_with_password({"email": email, "password": password})
         
         if response.user:
             st.session_state.user = response.user
             st.session_state.user_id = response.user.id
             st.session_state.usuario = email
-            st.success(f"✅ Bienvenido {email}")
             return True
-        return False
+        else:
+            st.error("Credenciales incorrectas o usuario no confirmado.")
+            return False
     except Exception as e:
-        st.error(f"❌ Error de autenticación: {str(e)}")
-        # Limpiar sesión en caso de error
-        if 'user' in st.session_state:
-            del st.session_state.user
-        if 'user_id' in st.session_state:
-            del st.session_state.user_id
+        st.error(f"Error de autenticación: {e}")
         return False
 
 def register_user(email: str, password: str) -> bool:
