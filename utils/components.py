@@ -9,6 +9,15 @@ from utils.database import (
     get_lugares_trabajo, 
     create_lugar_trabajo
 )
+from utils.db import get_supabase_client  # ← AGREGAR ESTA IMPORTACIÓN
+
+# ==================== INICIALIZACIÓN DE CLIENTE SUPABASE ====================
+# Inicializar el cliente de Supabase una sola vez
+try:
+    supabase = get_supabase_client()
+except Exception as e:
+    st.error(f"❌ Error al conectar con Supabase: {e}")
+    supabase = None
 
 # ==================== UTILIDADES ====================
 def safe_numeric_value(value: Any) -> float:
@@ -31,6 +40,11 @@ def _selector_entidad(datos: List[Tuple[int, str]], label: str, key: str, btn_nu
     user_id = st.session_state.get('user_id')
     if not user_id:
         st.error("❌ No se pudo obtener el ID de usuario")
+        return None
+    
+    # Verificar conexión a Supabase
+    if supabase is None:
+        st.error("❌ No hay conexión a la base de datos")
         return None
     
     # Asegura que el cliente/lugar 'Ninguno' se maneje
@@ -95,6 +109,11 @@ def show_cliente_lugar_selector() -> Tuple[Optional[int], str, Optional[int], st
     if 'user_id' not in st.session_state:
         st.error("❌ No has iniciado sesión")
         st.stop()
+
+    # Verificar conexión a Supabase
+    if supabase is None:
+        st.error("❌ No hay conexión a la base de datos. No se pueden cargar clientes y lugares.")
+        return None, "", None, "", ""
 
     try:
         # OBTENER EL USER_ID DE LA SESIÓN
@@ -162,6 +181,11 @@ def selector_categoria(key_suffix: str) -> Optional[int]:
     user_id = st.session_state.get('user_id')
     if not user_id:
         st.error("❌ No se pudo obtener el ID de usuario")
+        return None
+    
+    # Verificar conexión a Supabase
+    if supabase is None:
+        st.error("❌ No hay conexión a la base de datos")
         return None
     
     try:
@@ -287,6 +311,11 @@ def show_items_presupuesto():
     user_id = st.session_state.get('user_id')
     if not user_id:
         st.error("❌ No se pudo obtener el ID de usuario")
+        return
+        
+    # Verificar conexión a Supabase
+    if supabase is None:
+        st.error("❌ No hay conexión a la base de datos")
         return
         
     if 'categorias' not in st.session_state:
