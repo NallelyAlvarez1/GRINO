@@ -223,7 +223,7 @@ def mostrar_boton_descarga_pdf(presupuesto_id: int, presupuesto):
                 "descripcion": item.get("notas", "")
             })
 
-        pdf_path = generar_pdf_moderno(
+        pdf_path = generar_pdf(
             presupuesto["cliente"]["nombre"],
             presupuesto["lugar"]["nombre"],
             categorias,
