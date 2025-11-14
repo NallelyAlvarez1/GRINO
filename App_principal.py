@@ -18,7 +18,13 @@ if 'usuario' not in st.session_state:
 is_logged_in = check_login()
 
 # --- 2. CONTENIDO PROTEGIDO (USUARIO LOGUEADO) ---
+# En la sección de usuario logueado, después del sidebar
 if is_logged_in:
+    st.sidebar.write("---")
+    st.sidebar.subheader("🔍 Debug Info")
+    st.sidebar.write(f"User ID: `{st.session_state.user_id}`")
+    st.sidebar.write(f"Tipo User ID: `{type(st.session_state.user_id)}`")
+    st.sidebar.write(f"Usuario: `{st.session_state.usuario}`")
     # Obtener el cliente de Supabase (cacheado)
     supabase = get_supabase_client()
     

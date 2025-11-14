@@ -27,8 +27,11 @@ def safe_numeric_value(value: Any) -> float:
 # ==================== SECCION CLIENTE - LUGAR DE TRABAJO ====================
 
 def _selector_entidad(datos: List[Tuple[int, str]], label: str, key: str, btn_nuevo: str, modal_title: str, placeholder_nombre: str, funcion_creacion: callable, label_visibility: str) -> Optional[int]:
-    # ... (cuerpo de la función original)
-    # Se incluye el cuerpo completo para que el archivo sea funcional
+    # Asegurar que tenemos user_id
+    user_id = st.session_state.get('user_id')
+    if not user_id:
+        st.error("❌ No se pudo obtener el ID de usuario")
+        return None
     
     # Asegura que el cliente/lugar 'Ninguno' se maneje
     opciones_display = ["(Seleccione)"] + [nombre for _, nombre in datos]
@@ -66,8 +69,6 @@ def _selector_entidad(datos: List[Tuple[int, str]], label: str, key: str, btn_nu
             with col_save:
                 if st.form_submit_button("💾 Crear", type="primary"):
                     if nombre_nuevo.strip():
-                        # Asegurar que user_id está en la sesión
-                        user_id = st.session_state.get('user_id')
                         if user_id:
                             new_id = funcion_creacion(nombre=nombre_nuevo.strip(), user_id=user_id)
                             if new_id:
@@ -78,11 +79,11 @@ def _selector_entidad(datos: List[Tuple[int, str]], label: str, key: str, btn_nu
                                     del st.session_state['cliente_data']
                                 st.rerun()
                             else:
-                                st.error(f"Error al crear {label}. Revise la base de datos.")
+                                st.error(f"❌ Error al crear {label}. Revise la base de datos.")
                         else:
-                            st.error("No se pudo obtener el ID de usuario para crear el registro.")
+                            st.error("❌ No se pudo obtener el ID de usuario para crear el registro.")
                     else:
-                        st.error(f"El nombre de {label} no puede estar vacío.")
+                        st.error(f"⚠️ El nombre de {label} no puede estar vacío.")
             with col_cancel:
                 if st.form_submit_button("❌ Cancelar"):
                     st.session_state[f'{key}_modal_open'] = False
@@ -90,20 +91,24 @@ def _selector_entidad(datos: List[Tuple[int, str]], label: str, key: str, btn_nu
 
     return entidad_id
 
-def show_cliente_lugar_selector() -> Tuple[int, str, int, str]:
+def show_cliente_lugar_selector() -> Tuple[Optional[int], str, Optional[int], str, str]:
     if 'user_id' not in st.session_state:
         st.error("❌ No has iniciado sesión")
         st.stop()
 
     try:
-        # Si no hay data cacheada de clientes, se carga. (Útil para manejar reruns)
-        if "cliente_data" not in st.session_state:
-             st.session_state["cliente_data"] = get_clientes()
-        clientes = st.session_state["cliente_data"]
+        # OBTENER EL USER_ID DE LA SESIÓN
+        user_id = st.session_state.user_id
         
-        lugares = get_lugares_trabajo()
+        # PASAR user_id A LAS FUNCIONES
+        if "cliente_data" not in st.session_state:
+            st.session_state["cliente_data"] = get_clientes(user_id)  # ← PASA user_id AQUÍ
+        
+        clientes = st.session_state["cliente_data"]
+        lugares = get_lugares_trabajo(user_id)  # ← PASA user_id AQUÍ
+        
     except Exception as e:
-        st.error(f"Error cargando datos: {e}")
+        st.error(f"❌ Error cargando datos: {e}")
         st.stop()
 
     col1, col2, col3 = st.columns(3)
@@ -153,11 +158,17 @@ def show_cliente_lugar_selector() -> Tuple[int, str, int, str]:
 
 def selector_categoria(key_suffix: str) -> Optional[int]:
     """Muestra un selector de categorías con opción de crear nueva."""
+    # Asegurar que tenemos user_id
+    user_id = st.session_state.get('user_id')
+    if not user_id:
+        st.error("❌ No se pudo obtener el ID de usuario")
+        return None
+    
     try:
-        # Se obtiene la lista de categorías (id, nombre)
-        categorias_raw = get_categorias()
+        # Se obtiene la lista de categorías (id, nombre) PASANDO user_id
+        categorias_raw = get_categorias(user_id)
     except Exception as e:
-        st.error(f"Error cargando categorías: {e}")
+        st.error(f"❌ Error cargando categorías: {e}")
         return None
     
     # Formatear la lista para el selector
@@ -193,7 +204,6 @@ def selector_categoria(key_suffix: str) -> Optional[int]:
             with col_save:
                 if st.form_submit_button("💾 Crear", type="primary"):
                     if nombre_nuevo.strip():
-                        user_id = st.session_state.get('user_id')
                         if user_id:
                             new_id = create_categoria(nombre=nombre_nuevo.strip(), user_id=user_id)
                             if new_id:
@@ -202,11 +212,11 @@ def selector_categoria(key_suffix: str) -> Optional[int]:
                                 st.session_state[f"cat_selector_{key_suffix}"] = nombre_nuevo.strip() 
                                 st.rerun()
                             else:
-                                st.error("Error al crear categoría. Revise la base de datos.")
+                                st.error("❌ Error al crear categoría. Revise la base de datos.")
                         else:
-                             st.error("No se pudo obtener el ID de usuario.")
+                             st.error("❌ No se pudo obtener el ID de usuario.")
                     else:
-                        st.error("El nombre no puede estar vacío.")
+                        st.error("⚠️ El nombre no puede estar vacío.")
             with col_cancel:
                 if st.form_submit_button("❌ Cancelar"):
                     st.session_state[f'cat_modal_open_{key_suffix}'] = False
@@ -273,6 +283,12 @@ def _render_item_input(cat_nombre: str, item_index: int):
 
 def show_items_presupuesto():
     """Muestra la interfaz para agregar/editar ítems agrupados por categoría."""
+    # Asegurar que tenemos user_id
+    user_id = st.session_state.get('user_id')
+    if not user_id:
+        st.error("❌ No se pudo obtener el ID de usuario")
+        return
+        
     if 'categorias' not in st.session_state:
         # Estructura inicial: 'general' se usa para mano de obra general
         st.session_state['categorias'] = {'general': {'items': [], 'mano_obra': 0}}
@@ -283,11 +299,11 @@ def show_items_presupuesto():
     with st.container(border=True):
         st.markdown("##### Agregar nuevo ítem")
         
-        # Obtener lista de categorías para el selector
+        # Obtener lista de categorías para el selector PASANDO user_id
         try:
-            categorias_raw = get_categorias()
+            categorias_raw = get_categorias(user_id)
         except Exception as e:
-            st.error(f"Error cargando categorías: {e}")
+            st.error(f"❌ Error cargando categorías: {e}")
             categorias_raw = []
             
         # Transformar a diccionario para mapeo ID -> Nombre
@@ -320,7 +336,6 @@ def show_items_presupuesto():
                     with col_save:
                         if st.form_submit_button("💾 Crear", type="primary"):
                             if nombre_nuevo.strip():
-                                user_id = st.session_state.get('user_id')
                                 if user_id:
                                     new_id = create_categoria(nombre=nombre_nuevo.strip(), user_id=user_id)
                                     if new_id:
@@ -329,11 +344,11 @@ def show_items_presupuesto():
                                         st.session_state['cat_modal_open_top'] = False
                                         st.rerun()
                                     else:
-                                        st.error("Error al crear categoría.")
+                                        st.error("❌ Error al crear categoría.")
                                 else:
-                                     st.error("No se pudo obtener el ID de usuario.")
+                                     st.error("❌ No se pudo obtener el ID de usuario.")
                             else:
-                                st.error("El nombre no puede estar vacío.")
+                                st.error("⚠️ El nombre no puede estar vacío.")
                     with col_cancel:
                         if st.form_submit_button("❌ Cancelar"):
                             st.session_state['cat_modal_open_top'] = False
@@ -368,7 +383,7 @@ def show_items_presupuesto():
     categorias_a_mostrar = [cat for cat in st.session_state['categorias'] if cat != 'general']
     
     if not categorias_a_mostrar:
-        st.info("Aún no has agregado ítems a ninguna categoría.")
+        st.info("📭 Aún no has agregado ítems a ninguna categoría.")
         return
 
     for cat_nombre in categorias_a_mostrar:
@@ -391,7 +406,7 @@ def show_items_presupuesto():
                 # El renderizado gestiona la eliminación, por eso usamos el índice original
                 _render_item_input(cat_nombre, i)
         else:
-            st.info(f"No hay ítems para la categoría **{cat_nombre}**.")
+            st.info(f"📭 No hay ítems para la categoría **{cat_nombre}**.")
             st.button(f"🗑️ Eliminar categoría {cat_nombre}", key=f"del_cat_{cat_nombre}", help="Eliminar categoría vacía", 
                       on_click=lambda c=cat_nombre: st.session_state['categorias'].pop(c) or st.rerun())
 
@@ -423,7 +438,7 @@ def show_mano_obra():
     categorias_a_mostrar = [cat for cat in st.session_state['categorias'] if cat != 'general']
     
     if not categorias_a_mostrar:
-        st.info("Agrega ítems primero para asignar mano de obra por categoría.")
+        st.info("📭 Agrega ítems primero para asignar mano de obra por categoría.")
         return
         
     for cat_nombre in categorias_a_mostrar:
@@ -444,7 +459,7 @@ def show_resumen():
     st.subheader("Resumen del Presupuesto", divider="green")
     
     if 'categorias' not in st.session_state or not st.session_state['categorias']:
-        st.info("Comience agregando ítems y mano de obra para ver el resumen.")
+        st.info("📭 Comience agregando ítems y mano de obra para ver el resumen.")
         return
 
     # Usar una lista para el resumen de categorías
@@ -482,7 +497,7 @@ def show_resumen():
             })
             
     if not resumen_data:
-        st.info("El presupuesto está vacío.")
+        st.info("📭 El presupuesto está vacío.")
         return
 
     # Mostrar resumen en DataFrame
