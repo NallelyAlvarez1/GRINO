@@ -124,32 +124,33 @@ else:
     with tabs[0]:
         st.markdown("##### Acceso al Sistema")
         with st.form("login_form"):
-            email = st.text_input("Correo electrónico", key="login_email") 
+            email = st.text_input("Correo electrónico", key="login_email").strip().lower()
             password = st.text_input("Contraseña", type="password", key="login_password")
+            
             if st.form_submit_button("Ingresar", type="primary", use_container_width=True):
-                if authenticate(email, password): 
-                    st.success("Inicio de sesión correcto ✅")
-                    st.rerun()
+                if not email or not password:
+                    st.error("⚠️ Por favor ingrese correo y contraseña.")
                 else:
-                    st.error("Credenciales incorrectas o usuario no confirmado.")
-                    st.session_state.user_id = None 
+                    if authenticate(email, password):
+                        st.rerun()
+                    else:
+                        st.error("❌ Credenciales incorrectas o usuario no existe.")
 
-    # ------------------- REGISTRO -------------------
     with tabs[1]:
         st.markdown("##### Crear una Cuenta")
         with st.form("register_form"):
-            email_reg = st.text_input("Correo electrónico para registro", key="reg_email", placeholder="ejemplo@gmail.com")
+            email_reg = st.text_input("Correo electrónico", key="reg_email").strip().lower()
             password_reg = st.text_input("Contraseña (mínimo 6 caracteres)", type="password", key="reg_password")
             password_confirm = st.text_input("Confirmar Contraseña", type="password", key="reg_confirm")
             
             if st.form_submit_button("Registrar", type="secondary", use_container_width=True):
                 if not email_reg or not password_reg:
-                    st.error("Por favor ingrese correo y contraseña.")
+                    st.error("⚠️ Por favor ingrese correo y contraseña.")
                 elif password_reg != password_confirm:
-                    st.error("Las contraseñas no coinciden.")
+                    st.error("❌ Las contraseñas no coinciden.")
                 elif len(password_reg) < 6:
-                    st.error("La contraseña debe tener al menos 6 caracteres.")
-                elif register_user(email_reg, password_reg): 
-                    st.success("Usuario registrado. Por favor, confirme su Gmail e inicie sesión.")
+                    st.error("❌ La contraseña debe tener al menos 6 caracteres.")
+                elif register_user(email_reg, password_reg):
+                    st.success("📩 Verifica tu email para completar el registro.")
                 else:
-                    st.error("Error al registrar el usuario. El correo puede estar ya en uso o el formato es inválido.")
+                    st.error("❌ Error al registrar el usuario. El correo puede estar en uso.")

@@ -1,68 +1,81 @@
 import streamlit as st
-# from utils.db import get_supabase_client # Se mantiene la importación si la conexión global está aquí
 from utils.db import get_supabase_client 
-
-# ==================== FUNCIONES DE AUTENTICACIÓN ====================
 
 def check_login() -> bool:
     """Verifica si el usuario está logueado."""
-    # Verificamos si existe el ID de usuario, que es el UUID de Supabase Auth
     return 'user_id' in st.session_state and st.session_state.user_id is not None
 
 def authenticate(email: str, password: str) -> bool:
-    """Autentica credenciales usando Supabase Auth (email/password)."""
+    """Autentica credenciales usando Supabase Auth."""
     supabase = get_supabase_client()
     try:
-        # Usamos sign_in_with_password de Supabase Auth
-        # El método sing_in_with_password devuelve la sesión y el usuario
-        response = supabase.auth.sign_in_with_password({"email": email, "password": password})
+        response = supabase.auth.sign_in_with_password({
+            "email": email.strip().lower(), 
+            "password": password
+        })
         
-        # Si la autenticación es exitosa, guardamos la sesión y el user_id
         if response.user:
             st.session_state.user = response.user
-            st.session_state.user_id = response.user.id # El ID de usuario es el UUID de Supabase
-            st.session_state.usuario = email # Se usa el email para identificar al usuario en la UI
+            st.session_state.user_id = response.user.id
+            st.session_state.usuario = email
+            st.success(f"✅ Bienvenido {email}")
             return True
         return False
     except Exception as e:
-        # Supabase maneja los errores como credenciales incorrectas, pero capturamos por seguridad
-        print(f"Error de autenticación: {e}")
-        # En caso de error, aseguramos que la sesión no se mantenga
-        st.session_state.user = None
-        st.session_state.user_id = None
+        st.error(f"❌ Error de autenticación: {str(e)}")
+        # Limpiar sesión en caso de error
+        if 'user' in st.session_state:
+            del st.session_state.user
+        if 'user_id' in st.session_state:
+            del st.session_state.user_id
         return False
 
 def register_user(email: str, password: str) -> bool:
     """Registra un nuevo usuario en Supabase Auth."""
     supabase = get_supabase_client()
     try:
-        # Supabase crea el usuario y envía el email de confirmación (si está configurado)
-        response = supabase.auth.sign_up({"email": email, "password": password})
+        # Limpiar y normalizar el email
+        clean_email = email.strip().lower()
         
-        # Si el registro es exitoso, response.user tendrá el usuario,
-        # aunque puede que no esté confirmado aún, pero la cuenta se crea.
-        return True
+        response = supabase.auth.sign_up({
+            "email": clean_email,
+            "password": password,
+            "options": {
+                "data": {
+                    "email": clean_email
+                }
+            }
+        })
+        
+        if response.user:
+            st.success("✅ Usuario registrado correctamente. Por favor, verifica tu email.")
+            return True
+        elif response.error:
+            st.error(f"❌ Error al registrar: {response.error.message}")
+            return False
+        else:
+            st.error("❌ Error desconocido al registrar usuario")
+            return False
+            
     except Exception as e:
-        print(f"Error al registrar usuario: {e}")
+        st.error(f"❌ Error en registro: {str(e)}")
         return False
 
 def sign_out():
-    """Cierra la sesión del usuario en Supabase y limpia el estado de Streamlit."""
+    """Cierra la sesión del usuario."""
     supabase = get_supabase_client()
     try:
         supabase.auth.sign_out()
     except Exception as e:
-        print(f"Error al cerrar sesión de Supabase: {e}")
+        print(f"Error al cerrar sesión: {e}")
         
     # Limpiar el estado de Streamlit
-    if 'user' in st.session_state:
-        del st.session_state.user
-    if 'user_id' in st.session_state:
-        del st.session_state.user_id
-    if 'usuario' in st.session_state:
-        del st.session_state.usuario
-        
-    # Limpiar otros estados relacionados
+    keys_to_remove = ['user', 'user_id', 'usuario', 'categorias', 'presupuesto_a_editar_id']
+    for key in keys_to_remove:
+        if key in st.session_state:
+            del st.session_state[key]
+            
+    # Limpiar estados de expanders
     for key in list(st.session_state.keys()):
         if key.startswith('expander_toggle_'):
             del st.session_state[key]
