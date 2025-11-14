@@ -47,3 +47,4 @@ def test_supabase_connection(supabase_client: Client) -> bool:
         # Este error es el que capturará problemas de credenciales si Supabase las rechaza
         st.error(f"❌ Error de conexión/API de Supabase: {e}")
         return False
+    

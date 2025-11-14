@@ -385,7 +385,6 @@ def clientes_page():
         mostrar_formulario_cliente()
         st.markdown("---")
 
-
     # ------------------- TABLA DE CLIENTES -------------------
     st.subheader("Clientes Registrados", divider="blue")
     
@@ -400,9 +399,20 @@ def clientes_page():
         st.info("No se han encontrado clientes registrados.")
         return
 
-    # Convertir a DataFrame para mostrar
+    # Convertir a DataFrame para mostrar - CORREGIDO: Verificar que las columnas existen
     df_clientes = pd.DataFrame(clientes)
-    df_display = df_clientes[['nombre', 'fecha_creacion', 'creado_por', 'id']].rename(
+    
+    # Verificar que las columnas necesarias existen antes de acceder a ellas
+    columnas_necesarias = ['nombre', 'fecha_creacion', 'creado_por', 'id']
+    columnas_existentes = [col for col in columnas_necesarias if col in df_clientes.columns]
+    
+    if len(columnas_existentes) != len(columnas_necesarias):
+        st.error(f"Faltan columnas en los datos. Esperadas: {columnas_necesarias}, Encontradas: {df_clientes.columns.tolist()}")
+        st.write("Datos recibidos:", df_clientes.head() if not df_clientes.empty else "DataFrame vacío")
+        return
+    
+    # Si todas las columnas existen, proceder con el renombrado
+    df_display = df_clientes[columnas_existentes].rename(
         columns={'nombre': 'Cliente', 'fecha_creacion': 'Fecha Creación', 'creado_por': 'Creado por (Email)', 'id': 'ID'}
     )
     
@@ -467,19 +477,19 @@ def clientes_page():
         else:
             del st.session_state['eliminar_cliente']
             st.rerun()
+
+# ------------------- EJECUCIÓN PRINCIPAL CORREGIDA -------------------
 is_logged_in = check_login()
 
 if __name__ == "__main__":
     if is_logged_in:
-        clientes_page()
+        # Determinar qué página mostrar basado en la ruta actual
+        if "clientes_page" in st.session_state and st.session_state.clientes_page:
+            clientes_page()
+            # Limpiar el estado después de usar
+            del st.session_state.clientes_page
+        else:
+            main()  # Mostrar la página de historial por defecto
     else:
         st.error("🔒 Por favor inicie sesión primero")
         st.page_link("App_principal.py", label="Ir a página de inicio")
-
-if __name__ == "__main__":
-    if is_logged_in:
-        main()
-    else:
-        st.error("🔒 Por favor inicie sesión primero")
-        st.page_link("App_principal.py", label="Ir a página de inicio")
-
