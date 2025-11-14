@@ -88,11 +88,12 @@ def main():
 
                     # Generar PDF
                     pdf_path = generar_pdf(
-                        cliente_nombre,
-                        items_data,
-                        lugar_nombre,
+                        cliente=cliente_nombre,
+                        lugar=lugar_nombre,
+                        categorias=items_data,
                         descripcion=descripcion
                     )
+
 
                     # VALIDACIÓN DE RUTA PDF
                     if not pdf_path or not os.path.exists(pdf_path):
