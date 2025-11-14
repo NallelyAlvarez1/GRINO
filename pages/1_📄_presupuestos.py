@@ -67,22 +67,20 @@ def main():
     show_resumen(items_data)
 
     # ========== GUARDADO ==========
+    total_general = show_resumen(items_data)
     
     if st.button("📂 Guardar Presupuesto Completo", type="primary",
                 help="Revise todos los datos antes de guardar"):
 
         with st.spinner("Guardando presupuesto..."):
             try:
-                # Calcular total
-                total = calcular_total(items_data)
-                
-                # Crear presupuesto
                 presupuesto_id = save_presupuesto_completo(
-                cliente_id=cliente_id,
-                lugar_id=lugar_id,
-                descripcion=descripcion or "Sin descripción",
-                total=total,
-                user_id=st.session_state.user_id
+                    user_id=st.session_state.user_id,   # 1er argumento
+                    cliente_id=cliente_id,              # 2do argumento
+                    lugar_id=lugar_id,                  # 3er argumento
+                    descripcion=descripcion,            # 4to argumento
+                    items_data=items_data,              # 5to argumento (que faltaba)
+                    total=total_general                 # 6to argumento
                 )
 
 
