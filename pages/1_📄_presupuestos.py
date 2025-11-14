@@ -67,64 +67,72 @@ def main():
     show_resumen(items_data)
 
     # ========== GUARDADO ==========
+# Obtener los datos primero
+    cliente_id, cliente_nombre, lugar_id, lugar_nombre, descripcion = show_cliente_lugar_selector()
+    items_data = show_items_presupuesto()
+    show_mano_obra(items_data)
     total_general = show_resumen(items_data)
-    
-    if st.button("📂 Guardar Presupuesto Completo", type="primary",
-                help="Revise todos los datos antes de guardar"):
 
-        with st.spinner("Guardando presupuesto..."):
-            try:
-                presupuesto_id = save_presupuesto_completo(
-                    user_id=st.session_state.user_id,   # 1er argumento
-                    cliente_id=cliente_id,              # 2do argumento
-                    lugar_id=lugar_id,                  # 3er argumento
-                    descripcion=descripcion,            # 4to argumento
-                    items_data=items_data,              # 5to argumento (que faltaba)
-                    total=total_general                 # 6to argumento
-                )
+    # Llamada CORRECTA - verifica cada parámetro
+    if st.button("💾 Guardar Presupuesto", type="primary"):
+        st.write("🔍 Debug - Valores a guardar:")
+        st.write(f"user_id: {st.session_state.user_id}")
+        st.write(f"cliente_id: {cliente_id}")
+        st.write(f"lugar_id: {lugar_id}")
+        st.write(f"descripcion: {descripcion}")
+        st.write(f"total_general: {total_general}")
+        st.write(f"items_data keys: {list(items_data.keys())}")
+        
+        presupuesto_id = save_presupuesto_completo(
+            user_id=st.session_state.user_id,
+            cliente_id=cliente_id,
+            lugar_id=lugar_id,
+            descripcion=descripcion,
+            items_data=items_data,
+            total=total_general
+        )
+        
+        if presupuesto_id:
+            st.balloons()
+            st.success(f"🎉 ¡Presupuesto guardado exitosamente! ID: {presupuesto_id}")
+        else:
+            st.error("❌ No se pudo guardar el presupuesto_id")
+        
+        if not save_presupuesto_completo(presupuesto_id, items_data):
+                st.error("Error al guardar los items del presupuesto")
+                st.stop()
+
+        # Generar PDF
+        pdf_path = generar_pdf(cliente_nombre, items_data, lugar_nombre, descripcion=descripcion)
+        
+        # Mostrar éxito y opciones
+        st.toast(f"Presupuesto #{presupuesto_id} guardado!", icon="✅")
+        st.success("""
+        Presupuesto guardado correctamente. 
+        ¿Qué deseas hacer ahora?
+        """)
+
+        # Botón para descargar PDF
+        with open(pdf_path, "rb") as f:
+            st.download_button(
+                "📄 Descargar PDF", 
+                f, 
+                file_name=f"presupuesto_{presupuesto_id}.pdf", 
+                mime="application/pdf"
+            )
+
+        cols = st.columns(3)
+        with cols[0]:
+            if st.button("🔄 Crear otro presupuesto"):
+                if 'categorias' in st.session_state:
+                    del st.session_state['categorias']
+                st.rerun()
+        with cols[1]:
+            st.page_link("pages/2_🕒_historial.py", label="📋 Ver Presupuestos")
+        with cols[2]:
+            st.page_link("App_principal.py", label="🏠 Ir al Inicio")
 
 
-                if not presupuesto_id:
-                    st.error("Error al crear el presupuesto")
-                    st.stop()
-    
-                if not save_presupuesto_completo(presupuesto_id, items_data):
-                    st.error("Error al guardar los items del presupuesto")
-                    st.stop()
-
-                # Generar PDF
-                pdf_path = generar_pdf(cliente_nombre, items_data, lugar_nombre, descripcion=descripcion)
-                
-                # Mostrar éxito y opciones
-                st.toast(f"Presupuesto #{presupuesto_id} guardado!", icon="✅")
-                st.success("""
-                Presupuesto guardado correctamente. 
-                ¿Qué deseas hacer ahora?
-                """)
-
-                # Botón para descargar PDF
-                with open(pdf_path, "rb") as f:
-                    st.download_button(
-                        "📄 Descargar PDF", 
-                        f, 
-                        file_name=f"presupuesto_{presupuesto_id}.pdf", 
-                        mime="application/pdf"
-                    )
-
-                cols = st.columns(3)
-                with cols[0]:
-                    if st.button("🔄 Crear otro presupuesto"):
-                        if 'categorias' in st.session_state:
-                            del st.session_state['categorias']
-                        st.rerun()
-                with cols[1]:
-                    st.page_link("pages/2_🕒_historial.py", label="📋 Ver Presupuestos")
-                with cols[2]:
-                    st.page_link("App_principal.py", label="🏠 Ir al Inicio")
-
-            except Exception as e:
-                st.error(f"Error al guardar: {str(e)}")
-                st.exception(e)
 # Verificación de login y ejecución principal
 is_logged_in = check_login()
 

@@ -144,45 +144,71 @@ def create_lugar_trabajo(nombre: str, user_id: str) -> Optional[int]:
 
 # ==================== FUNCIONES DE PRESUPUESTOS ====================
 
-def save_presupuesto_completo(user_id: str, cliente_id: int, lugar_id: int, descripcion: str, items_data: Dict[str, Any], total_general: float) -> Optional[int]:
+def save_presupuesto_completo(user_id: str, cliente_id: int, lugar_id: int, descripcion: str, items_data: Dict[str, Any], total: float) -> Optional[int]:
     """
     Guarda el presupuesto principal y sus ítems.
     Regresa el ID del presupuesto creado.
     """
     supabase = get_supabase_client()
+    
+    # Validaciones básicas
+    if not user_id:
+        st.error("❌ Error: user_id es requerido")
+        return None
+        
+    if not cliente_id or not lugar_id:
+        st.error("❌ Error: cliente_id y lugar_id son requeridos")
+        return None
+        
+    if not items_data:
+        st.error("❌ Error: No hay items para guardar")
+        return None
+
     try:
         # 1. Guardar el presupuesto principal
         presupuesto_data = {
-            "creado_por": user_id,  # UUID
+            "creado_por": user_id,
             "cliente_id": cliente_id,
             "lugar_trabajo_id": lugar_id,
             "descripcion": descripcion,
-            "total": float(total_general),  # ← Cambiado a total_general
+            "total": float(total),
             "num_items": sum(len(data['items']) for cat, data in items_data.items() if cat != 'general') + (1 if items_data.get('general', {}).get('mano_obra', 0) > 0 else 0)
         }
         
+        st.write("📝 Intentando guardar presupuesto con datos:", presupuesto_data)
+        
         response = supabase.table("presupuestos").insert(presupuesto_data).execute()
+        
+        if not response.data:
+            st.error("❌ Error: No se recibió respuesta al insertar presupuesto")
+            return None
+            
         nuevo_presupuesto_id = response.data[0]['id']
+        st.success(f"✅ Presupuesto principal guardado. ID: {nuevo_presupuesto_id}")
         
         # 2. Preparar los ítems para la inserción masiva
         items_to_insert = []
+        
+        # Añadir Mano de Obra General si existe
+        mano_obra_general = items_data.get('general', {}).get('mano_obra', 0)
+        if mano_obra_general > 0:
+            items_to_insert.append({
+                "presupuesto_id": nuevo_presupuesto_id,
+                "nombre": "Mano de Obra General",
+                "categoria": "General",
+                "unidad": "Global",
+                "cantidad": 1.0,
+                "precio_unitario": float(mano_obra_general),
+                "total": float(mano_obra_general),
+                "notas": "Costo de mano de obra para el trabajo completo."
+            })
+        
+        # Añadir ítems de categorías específicas
         for categoria, data in items_data.items():
-            # Añadir Mano de Obra General si existe
-            mano_obra_general = data.get('mano_obra', 0)
-            if categoria == 'general' and mano_obra_general > 0:
-                 items_to_insert.append({
-                    "presupuesto_id": nuevo_presupuesto_id,
-                    "nombre": "Mano de Obra General",
-                    "categoria": "General",
-                    "unidad": "Global",
-                    "cantidad": 1.0,
-                    "precio_unitario": float(mano_obra_general),
-                    "total": float(mano_obra_general),
-                    "notas": "Costo de mano de obra para el trabajo completo."
-                })
-            
-            # Añadir ítems de categorías específicas
-            for item in data['items']:
+            if categoria == 'general':
+                continue  # Ya manejamos mano de obra general
+                
+            for item in data.get('items', []):
                 items_to_insert.append({
                     "presupuesto_id": nuevo_presupuesto_id,
                     "nombre": item.get('nombre', 'Item sin nombre'),
@@ -196,12 +222,24 @@ def save_presupuesto_completo(user_id: str, cliente_id: int, lugar_id: int, desc
 
         # 3. Insertar todos los ítems
         if items_to_insert:
-            supabase.table("items_en_presupuesto").insert(items_to_insert).execute()
+            st.write(f"📦 Insertando {len(items_to_insert)} items...")
+            items_response = supabase.table("items_en_presupuesto").insert(items_to_insert).execute()
+            
+            if not items_response.data:
+                st.error("❌ Error al insertar items en el presupuesto")
+                # Podrías considerar eliminar el presupuesto principal aquí
+                return None
+                
+            st.success(f"✅ {len(items_to_insert)} items guardados correctamente")
+        else:
+            st.warning("⚠️ No hay items para guardar")
         
         return nuevo_presupuesto_id
             
     except Exception as e:
-        print(f"Error al guardar presupuesto completo: {e}")
+        st.error(f"❌ Error crítico al guardar presupuesto: {str(e)}")
+        import traceback
+        st.error(f"📋 Traceback: {traceback.format_exc()}")
         return None
 
 def update_presupuesto_detalles(presupuesto_id: int, cliente_id: int, lugar_id: int, descripcion: str, total_general: float) -> bool:
