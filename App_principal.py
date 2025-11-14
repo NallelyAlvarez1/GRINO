@@ -18,13 +18,7 @@ if 'usuario' not in st.session_state:
 is_logged_in = check_login()
 
 # --- 2. CONTENIDO PROTEGIDO (USUARIO LOGUEADO) ---
-# En la sección de usuario logueado, después del sidebar
 if is_logged_in:
-    st.sidebar.write("---")
-    st.sidebar.subheader("🔍 Debug Info")
-    st.sidebar.write(f"User ID: `{st.session_state.user_id}`")
-    st.sidebar.write(f"Tipo User ID: `{type(st.session_state.user_id)}`")
-    st.sidebar.write(f"Usuario: `{st.session_state.usuario}`")
     # Obtener el cliente de Supabase (cacheado)
     supabase = get_supabase_client()
     
@@ -34,7 +28,15 @@ if is_logged_in:
         # Mostrar información del usuario
         st.markdown(f"**👤 Usuario:** `{st.session_state.usuario}`")
         # Mostrar solo una parte del ID para hacerlo más corto
-        st.markdown(f"**🆔 ID:** `{st.session_state.user_id[:8]}...`")
+        if st.session_state.user_id:
+            st.markdown(f"**🆔 ID:** `{st.session_state.user_id[:8]}...`")
+        
+        # Debug Info en el sidebar
+        st.write("---")
+        st.subheader("🔍 Debug Info")
+        st.write(f"User ID: `{st.session_state.user_id}`")
+        st.write(f"Tipo User ID: `{type(st.session_state.user_id)}`")
+        st.write(f"Usuario: `{st.session_state.usuario}`")
         
         # Botón de Cerrar Sesión
         if st.button("🚪 Cerrar Sesión", type="primary", use_container_width=True):
@@ -91,7 +93,7 @@ if is_logged_in:
 
     for i, p in enumerate(paginas):
         with columnas[i]:
-        # Usamos un contenedor con borde para simular la tarjeta (Card)
+            # Usamos un contenedor con borde para simular la tarjeta (Card)
             with st.container(border=True): 
                 st.subheader(f"{p['icono']} {p['titulo']}")
                 
@@ -111,13 +113,10 @@ if is_logged_in:
                 # 2. Descripción
                 st.write(p['descripcion'])
 
-                # 3. Botón de Enlace
-                st.page_link(
-                    p['pagina'], 
-                    label=f"Ir a {p['titulo']}", 
-                    key=f"link_{p['key']}",
-                    use_container_width=True
-                )
+                # 3. Botón de Enlace - SOLUCIÓN DEFINITIVA
+                # Usamos st.link_button que es más estable que st.page_link
+                if st.button(f"🚀 Ir a {p['titulo']}", key=f"btn_{p['key']}", use_container_width=True):
+                    st.switch_page(p['pagina'])
 
 # --- 3. CONTENIDO PÚBLICO (USUARIO NO LOGUEADO) ---
 else:
