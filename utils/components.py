@@ -161,7 +161,7 @@ def show_cliente_lugar_selector() -> Tuple[Optional[int], str, Optional[int], st
     with col3:
         st.markdown("#### Descripción")
         descripcion = st.text_area("Trabajo a realizar", 
-                                   placeholder="Breve descripción del trabajo a presupuestar", 
+                                   placeholder="Breve descripción del trabajo a realizar", 
                                    key="presupuesto_descripcion",
                                    label_visibility="collapsed",
                                    height=80)

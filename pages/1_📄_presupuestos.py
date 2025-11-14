@@ -31,7 +31,7 @@ def calcular_total(items_data: Dict[str, Any]) -> float:
             total += sum(safe_numeric_value(item.get('total', 0)) for item in items)
         total += safe_numeric_value(data.get('mano_obra', 0))
     return total
-
+show_items_presupuesto()
 def main():
     st.title("📋 Generar Nuevo Presupuesto")
 
@@ -47,8 +47,8 @@ def main():
     st.session_state.descripcion = descripcion
 
     # Inicialización segura de la estructura de categorías si no existe
-    if 'categorias' not in st.session_state:
-        st.session_state['categorias'] = {'general': {'items': [], 'mano_obra': 0.0}}
+    #if 'categorias' not in st.session_state:
+        #st.session_state['categorias'] = {'general': {'items': [], 'mano_obra': 0.0}}
         
     # ========== SECCIÓN ITEMS ==========
     st.subheader("Datos del Presupuesto", divider="blue")
