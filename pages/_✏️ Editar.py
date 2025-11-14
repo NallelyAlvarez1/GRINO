@@ -49,7 +49,7 @@ def cargar_presupuesto_en_sesion(presupuesto_id: int):
     
     # 1. Cargar metadatos (Cliente, Lugar, Descripción)
     st.session_state['presupuesto_cliente_id'] = detalle['cliente']['id']
-    st.session_state['presupuesto_lugar_id'] = detalle['lugar']['id']
+    st.session_state['presupuesto_lugar_trabajo_id'] = detalle['lugar']['id']
     st.session_state['presupuesto_descripcion'] = detalle['descripcion']
     
     # 2. Cargar ítems y Mano de Obra, agrupando por categoría
@@ -160,7 +160,7 @@ def editar_presupuesto_page():
     
     # Selector de cliente (usando el ID cargado previamente)
     cliente_seleccionado = st.session_state.get('presupuesto_cliente_id')
-    lugar_seleccionado = st.session_state.get('presupuesto_lugar_id')
+    lugar_seleccionado = st.session_state.get('presupuesto_lugar_trabajo_id')
     descripcion_inicial = st.session_state.get('presupuesto_descripcion', '')
 
     col1, col2 = st.columns(2)
@@ -192,7 +192,7 @@ def editar_presupuesto_page():
             key="edit_lugar_selector",
             label_visibility="collapsed"
         )
-        lugar_id_actualizado = next((i for i, n in lugares if n == lugar_nombre_sel), lugar_seleccionado)
+        lugar_trabajo_id_actualizado = next((i for i, n in lugares if n == lugar_nombre_sel), lugar_seleccionado)
         lugar_nombre_actualizado = lugar_nombre_sel
 
 
@@ -227,7 +227,7 @@ def editar_presupuesto_page():
         st.markdown(f"**Total a Guardar:** **${total_general_actualizado:,.2f}**")
         
         if st.form_submit_button("💾 Guardar Edición y Generar PDF", type="primary", width='stretch'):
-            if not cliente_id_actualizado or not lugar_id_actualizado:
+            if not cliente_id_actualizado or not lugar_trabajo_id_actualizado:
                 st.error("⚠️ Cliente o Lugar de Trabajo no válidos.")
             elif total_general_actualizado <= 0:
                 st.error("⚠️ El total del presupuesto editado debe ser mayor a cero.")
@@ -238,7 +238,7 @@ def editar_presupuesto_page():
                         presupuesto_id=presupuesto_id,
                         user_id=user_id,
                         cliente_id=cliente_id_actualizado,
-                        lugar_id=lugar_id_actualizado,
+                        lugar_trabajo_id=lugar_trabajo_id_actualizado,
                         descripcion=descripcion_actualizada,
                         items_data=st.session_state['categorias'], # Usa la data manipulada por los componentes
                         total_general=total_general_actualizado

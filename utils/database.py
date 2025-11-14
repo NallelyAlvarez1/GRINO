@@ -144,7 +144,7 @@ def create_lugar_trabajo(nombre: str, user_id: str) -> Optional[int]:
 
 # ==================== FUNCIONES DE PRESUPUESTOS ====================
 
-def save_presupuesto_completo(user_id, cliente_id, lugar_id, descripcion, items_data, total):
+def save_presupuesto_completo(user_id, cliente_id, lugar_trabajo_id, descripcion, items_data, total):
     print("📌 save_presupuesto_completo() fue llamada correctamente")
     supabase = get_supabase_client()
     if not user_id:
@@ -156,7 +156,7 @@ def save_presupuesto_completo(user_id, cliente_id, lugar_id, descripcion, items_
         response = supabase.table("presupuestos").insert({
             "user_id": user_id,
             "cliente_id": cliente_id,
-            "lugar_trabajo_id": lugar_id,
+            "lugar_trabajo_id": lugar_trabajo_id,
             "descripcion": descripcion,
             "total": total
         }).execute()
@@ -218,13 +218,13 @@ def save_presupuesto_completo(user_id, cliente_id, lugar_id, descripcion, items_
         print("Error al guardar:", str(e))
         return {"error": str(e)}
 
-def update_presupuesto_detalles(presupuesto_id: int, cliente_id: int, lugar_id: int, descripcion: str, total_general: float) -> bool:
+def update_presupuesto_detalles(presupuesto_id: int, cliente_id: int, lugar_trabajo_id: int, descripcion: str, total_general: float) -> bool:
     """Actualiza los campos principales del presupuesto."""
     supabase = get_supabase_client()
     try:
         response = supabase.table("presupuestos").update({
             "cliente_id": cliente_id,
-            "lugar_trabajo_id": lugar_id,
+            "lugar_trabajo_id": lugar_trabajo_id,
             "descripcion": descripcion,
             "total": float(total_general)
         }).eq("id", presupuesto_id).execute()
@@ -243,7 +243,7 @@ def delete_items_presupuesto(presupuesto_id: int) -> bool:
         print(f"Error al eliminar ítems del presupuesto {presupuesto_id}: {e}")
         return False
 
-def save_edited_presupuesto(presupuesto_id: int, user_id: str, cliente_id: int, lugar_id: int, descripcion: str, items_data: Dict[str, Any], total_general: float) -> Optional[int]:
+def save_edited_presupuesto(presupuesto_id: int, user_id: str, cliente_id: int, lugar_trabajo_id: int, descripcion: str, items_data: Dict[str, Any], total_general: float) -> Optional[int]:
     """
     Guarda los cambios de un presupuesto existente.
     """
@@ -254,7 +254,7 @@ def save_edited_presupuesto(presupuesto_id: int, user_id: str, cliente_id: int, 
         
         actualizacion_principal = supabase.table("presupuestos").update({
             "cliente_id": cliente_id,
-            "lugar_trabajo_id": lugar_id,
+            "lugar_trabajo_id": lugar_trabajo_id,
             "descripcion": descripcion,
             "total": float(total_general),
             "num_items": num_items
@@ -345,8 +345,8 @@ def get_presupuestos_usuario(user_id: str, filtros: Dict[str, Any]) -> List[Dict
         # Aplicar filtros
         if 'cliente_id' in filtros and filtros['cliente_id'] is not None:
             query = query.eq("cliente_id", filtros['cliente_id'])
-        if 'lugar_id' in filtros and filtros['lugar_id'] is not None:
-            query = query.eq("lugar_trabajo_id", filtros['lugar_id'])
+        if 'lugar_trabajo_id' in filtros and filtros['lugar_trabajo_id'] is not None:
+            query = query.eq("lugar_trabajo_id", filtros['lugar_trabajo_id'])
         if 'fecha_inicio' in filtros and filtros['fecha_inicio'] is not None:
             query = query.gte("fecha_creacion", filtros['fecha_inicio'].isoformat())
 

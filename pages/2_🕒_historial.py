@@ -182,7 +182,7 @@ def main():
     if cliente_filtro:
         filtros['cliente_id'] = cliente_filtro
     if lugar_filtro:
-        filtros['lugar_id'] = lugar_filtro
+        filtros['lugar_trabajo_id'] = lugar_filtro
     
     if fecha_filtro == "Últimos 7 días":
         filtros['fecha_inicio'] = datetime.now() - timedelta(days=7)
