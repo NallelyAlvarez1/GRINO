@@ -31,7 +31,7 @@ def calcular_total(items_data: Dict[str, Any]) -> float:
             total += sum(safe_numeric_value(item.get('total', 0)) for item in items)
         total += safe_numeric_value(data.get('mano_obra', 0))
     return total
-show_items_presupuesto()
+
 def main():
     st.title("📋 Generar Nuevo Presupuesto")
 

@@ -175,269 +175,209 @@ def show_cliente_lugar_selector() -> Tuple[Optional[int], str, Optional[int], st
 
 # ==================== SECCIÓN ITEMS Y CATEGORÍAS ====================
 
-def selector_categoria(key_suffix: str) -> Optional[int]:
-    """Muestra un selector de categorías con opción de crear nueva."""
-    # Asegurar que tenemos user_id
-    user_id = st.session_state.get('user_id')
-    if not user_id:
-        st.error("❌ No se pudo obtener el ID de usuario")
-        return None
-    
-    # Verificar conexión a Supabase
-    if supabase is None:
-        st.error("❌ No hay conexión a la base de datos")
-        return None
-    
+def selector_categoria(mostrar_label: bool = True, requerido: bool = True, key_suffix: str = "") -> Tuple[Optional[int], Optional[str]]:
+    """Selector de categorías con capacidad para crear nuevas (usando _selector_entidad)"""
+    if 'user_id' not in st.session_state:
+        st.error("❌ No autenticado")
+        st.stop()
+
     try:
-        # Se obtiene la lista de categorías (id, nombre) PASANDO user_id
-        categorias_raw = get_categorias(user_id)
+        categorias = get_categorias(st.session_state.user_id)
     except Exception as e:
-        st.error(f"❌ Error cargando categorías: {e}")
-        return None
-    
-    # Formatear la lista para el selector
-    opciones_display = ["(Seleccione)"] + [nombre for _, nombre in categorias_raw]
-    opciones_ids = [None] + [id for id, _ in categorias_raw]
-    
-    col_sel, col_btn = st.columns([3, 1])
+        st.error(f"Error cargando categorías: {e}")
+        if requerido:
+            st.stop()
+        return None, None
 
-    with col_sel:
-        cat_nombre_seleccionada = st.selectbox(
-            "Categoría",
-            options=opciones_display,
-            key=f"cat_selector_{key_suffix}",
-            label_visibility="collapsed"
-        )
-        
-    # Obtener el ID seleccionado
-    cat_id_seleccionada = None
-    if cat_nombre_seleccionada and cat_nombre_seleccionada != "(Seleccione)":
-        cat_id_seleccionada = next((id for id, nombre in categorias_raw if nombre == cat_nombre_seleccionada), None)
-            
-    with col_btn:
-        if st.button("➕", key=f"new_cat_btn_{key_suffix}", help="Nueva Categoría", use_container_width=True):
-            st.session_state[f'cat_modal_open_{key_suffix}'] = True
-            
-    # Modal de creación de categoría
-    if st.session_state.get(f'cat_modal_open_{key_suffix}', False):
-        st.subheader("Nueva Categoría", divider='blue')
-        with st.form(key=f"form_new_cat_{key_suffix}", border=True):
-            nombre_nuevo = st.text_input("Nombre de la categoría", key=f"new_cat_name_{key_suffix}")
-            
-            col_save, col_cancel = st.columns(2)
-            with col_save:
-                if st.form_submit_button("💾 Crear", type="primary"):
-                    if nombre_nuevo.strip():
-                        if user_id:
-                            new_id = create_categoria(nombre=nombre_nuevo.strip(), user_id=user_id)
-                            if new_id:
-                                st.session_state[f'cat_modal_open_{key_suffix}'] = False
-                                # Seleccionar la nueva categoría
-                                st.session_state[f"cat_selector_{key_suffix}"] = nombre_nuevo.strip() 
-                                st.rerun()
-                            else:
-                                st.error("❌ Error al crear categoría. Revise la base de datos.")
-                        else:
-                             st.error("❌ No se pudo obtener el ID de usuario.")
-                    else:
-                        st.error("⚠️ El nombre no puede estar vacío.")
-            with col_cancel:
-                if st.form_submit_button("❌ Cancelar"):
-                    st.session_state[f'cat_modal_open_{key_suffix}'] = False
-                    st.rerun()
-                    
-    return cat_id_seleccionada
+    if mostrar_label:
+        st.markdown("#### Categoría")
 
-def _render_item_input(cat_nombre: str, item_index: int):
-    """Renderiza los inputs para un único ítem dentro de la sesión."""
-    # Acceso seguro al ítem
-    current_item = st.session_state['categorias'][cat_nombre]['items'][item_index]
-    
-    col_name, col_unit, col_qty, col_price, col_del = st.columns([3, 1.5, 1.5, 2, 0.7])
-    
-    with col_name:
-        current_item['nombre'] = st.text_input("Descripción", 
-                                               value=current_item.get('nombre', ''), 
-                                               key=f"item_{cat_nombre}_{item_index}_name",
-                                               label_visibility="collapsed")
-        # Campo de notas debajo del nombre
-        current_item['notas'] = st.text_input("Notas", 
-                                              value=current_item.get('notas', ''),
-                                              key=f"item_{cat_nombre}_{item_index}_notes",
-                                              placeholder="Notas del ítem",
-                                              label_visibility="collapsed")
+    categoria_id = _selector_entidad(
+        datos=categorias,
+        label="Seleccionar categoría",
+        key=f"categoria_{key_suffix}",
+        btn_nuevo="➕ Nueva categoría",
+        modal_title="Nueva Categoría",
+        placeholder_nombre="Nombre de la categoría",
+        funcion_creacion=create_categoria,
+        label_visibility="collapsed"
+    )
 
-    with col_unit:
-        current_item['unidad'] = st.text_input("Unidad", 
-                                               value=current_item.get('unidad', 'Unidad'), 
-                                               key=f"item_{cat_nombre}_{item_index}_unit",
-                                               label_visibility="collapsed")
-    with col_qty:
-        # Usamos safe_numeric_value en el valor inicial
-        current_item['cantidad'] = st.number_input("Cantidad", 
-                                                   value=safe_numeric_value(current_item.get('cantidad', 1.0)), 
-                                                   min_value=0.0, 
-                                                   step=0.1, 
-                                                   key=f"item_{cat_nombre}_{item_index}_qty",
-                                                   label_visibility="collapsed")
-    with col_price:
-        # Usamos safe_numeric_value en el valor inicial
-        current_item['precio_unitario'] = st.number_input("P. Unitario", 
-                                                          value=safe_numeric_value(current_item.get('precio_unitario', 0.0)), 
-                                                          min_value=0.0, 
-                                                          step=1.0, 
-                                                          key=f"item_{cat_nombre}_{item_index}_price",
-                                                          label_visibility="collapsed")
-                                                          
-    with col_del:
-        st.write("") # Espacio para alinear el botón
-        if st.button("🗑️", key=f"item_{cat_nombre}_{item_index}_del", help="Eliminar ítem"):
-            # Marcamos el ítem para eliminación y forzamos un rerun
-            st.session_state['categorias'][cat_nombre]['items'].pop(item_index)
-            st.rerun()
+    categoria_nombre = next((n for i, n in categorias if i == categoria_id), "Desconocido")
 
-    # Recalcular el total del ítem con valores seguros
-    qty = safe_numeric_value(current_item.get('cantidad'))
-    price = safe_numeric_value(current_item.get('precio_unitario'))
-    current_item['total'] = qty * price
-    
-    # Mostrar el subtotal del ítem
-    st.markdown(f"<p style='text-align: right; margin-top: -10px; margin-bottom: 5px;'>Subtotal: <b>${current_item['total']:,.2f}</b></p>", unsafe_allow_html=True)
-    st.markdown("---")
+    if requerido and not categoria_id:
+        st.warning("Por favor selecciona o crea una categoría")
+        st.stop()
 
-def show_items_presupuesto():
-    """Muestra la interfaz para agregar/editar ítems agrupados por categoría."""
-    # Asegurar que tenemos user_id
-    user_id = st.session_state.get('user_id')
-    if not user_id:
-        st.error("❌ No se pudo obtener el ID de usuario")
-        return
-        
-    # Verificar conexión a Supabase
-    if supabase is None:
-        st.error("❌ No hay conexión a la base de datos")
-        return
-        
+    return categoria_id, categoria_nombre
+
+def show_items_presupuesto() -> Dict[str, Any]:
     if 'categorias' not in st.session_state:
-        # Estructura inicial: 'general' se usa para mano de obra general
         st.session_state['categorias'] = {'general': {'items': [], 'mano_obra': 0}}
 
-    st.subheader("Ítems por Categoría", divider="blue")
-    
-    # Sección de selección de categoría para nuevo ítem
+    # ========== SECCIÓN CATEGORIA E ITEMS ==========    
     with st.container(border=True):
-        st.markdown("##### Agregar nuevo ítem")
+        col1, col2 = st.columns([2, 4])
         
-        # Obtener lista de categorías para el selector PASANDO user_id
-        try:
-            categorias_raw = get_categorias(user_id)
-        except Exception as e:
-            st.error(f"❌ Error cargando categorías: {e}")
-            categorias_raw = []
-            
-        # Transformar a diccionario para mapeo ID -> Nombre
-        cat_map = {id: nombre for id, nombre in categorias_raw}
-
-        # 1. Selector de categoría (incluyendo las ya existentes en sesión)
-        todas_las_cats = list(set(list(cat_map.values()) + list(st.session_state['categorias'].keys())))
-        if 'general' in todas_las_cats:
-            todas_las_cats.remove('general')
-            
-        col_sel_cat, col_btn_new_cat = st.columns([3, 1])
-        with col_sel_cat:
-            nueva_cat_nombre = st.selectbox(
-                "Seleccionar Categoría para nuevo ítem",
-                options=["(Seleccione)"] + sorted(todas_las_cats),
-                key="new_item_cat_selector",
-                label_visibility="collapsed"
+        with col1:
+            st.markdown("#### 1️⃣ Seleccionar/Crear Categoría")
+            categoria_id, categoria_nombre = selector_categoria(
+                mostrar_label=False,
+                requerido=True,
+                key_suffix="principal"
             )
+
+        with col2:
+            st.markdown(f"#### 2️⃣ Agregar Ítems a: {categoria_nombre}")
             
-        with col_btn_new_cat:
-            if st.button("➕ Cat", key="new_cat_btn_top", help="Crear nueva Categoría", use_container_width=True):
-                st.session_state['cat_modal_open_top'] = True
-                
-        # Simulación de Modal para nueva categoría (usando un expander simple)
-        if st.session_state.get('cat_modal_open_top', False):
-            with st.expander("Crear Nueva Categoría", expanded=True):
-                with st.form(key="form_new_cat_top", border=True):
-                    nombre_nuevo = st.text_input("Nombre de la categoría", key="new_cat_name_top")
-                    col_save, col_cancel = st.columns(2)
-                    with col_save:
-                        if st.form_submit_button("💾 Crear", type="primary"):
-                            if nombre_nuevo.strip():
-                                if user_id:
-                                    new_id = create_categoria(nombre=nombre_nuevo.strip(), user_id=user_id)
-                                    if new_id:
-                                        # Agregar la nueva categoría a las opciones y seleccionarla
-                                        st.session_state['new_item_cat_selector'] = nombre_nuevo.strip()
-                                        st.session_state['cat_modal_open_top'] = False
-                                        st.rerun()
-                                    else:
-                                        st.error("❌ Error al crear categoría.")
-                                else:
-                                     st.error("❌ No se pudo obtener el ID de usuario.")
-                            else:
-                                st.error("⚠️ El nombre no puede estar vacío.")
-                    with col_cancel:
-                        if st.form_submit_button("❌ Cancelar"):
-                            st.session_state['cat_modal_open_top'] = False
-                            st.rerun()
+            # Primera fila de inputs
+            col_nombre, col_cantidad, col_precio = st.columns(3)
+            with col_nombre:
+                nombre_item = st.text_input("Nombre del Ítem:", key="nombre_item_principal")
+            with col_cantidad:
+                cantidad = st.number_input("Cantidad:", min_value=0.0, value=1.0, step=0.1, key="cantidad_principal")
+            with col_precio:
+                precio_unitario = st.number_input("Precio Unitario ($):", min_value=0.0, value=0.0, step=1.0, key="precio_principal")
 
+            # Segunda fila de inputs
+            col_unidad, col_total, col_boton = st.columns(3)
+            with col_unidad:
+                unidad = st.selectbox(
+                    "Unidad:", 
+                    ["m²", "m³", "Unidad", "Metro lineal", "Saco", "Metro", "Caja", "Kilo (kg)", "Galón (gal)", "Litro", "Par/Juego", "Plancha"], 
+                    key="unidad_principal"
+                )
+            with col_total:
+                total = cantidad * precio_unitario
+                st.text_input("Total", value=f"${total:,.2f}", disabled=True)
+            with col_boton:
+                st.write("")
+                st.write("")
+                if st.button("➕ Guardar Ítem", type="primary", use_container_width=True):
+                    if not nombre_item.strip():
+                        st.error("Nombre del ítem es requerido")
+                    else:
+                        if categoria_nombre not in st.session_state['categorias']:
+                            st.session_state['categorias'][categoria_nombre] = {'items': [], 'mano_obra': 0}
 
-        # 2. Botón para agregar ítem
-        if nueva_cat_nombre != "(Seleccione)":
-            if st.button("➕ Agregar ítem a la categoría", key="add_item_btn", use_container_width=True, type="secondary"):
-                cat_nombre = nueva_cat_nombre
-                
-                if cat_nombre not in st.session_state['categorias']:
-                    st.session_state['categorias'][cat_nombre] = {'items': [], 'mano_obra': 0}
-                    
-                # Agregar nuevo ítem con valores iniciales
-                st.session_state['categorias'][cat_nombre]['items'].append({
-                    'nombre': '', 
-                    'unidad': 'Unidad', 
-                    'cantidad': 1.0, 
-                    'precio_unitario': 0.0, 
-                    'total': 0.0,
-                    'categoria': cat_nombre,
-                    'notas': ''
-                })
-                # Forzar rerun para que el nuevo ítem aparezca inmediatamente
-                st.rerun()
+                        items_cat = st.session_state['categorias'][categoria_nombre]['items']
+                        item_existente = next((i for i in items_cat if i['nombre'] == nombre_item and i['unidad'] == unidad), None)
 
-
-    st.markdown("---")
+                        if item_existente:
+                            item_existente['cantidad'] += cantidad
+                            item_existente['total'] = item_existente['cantidad'] * item_existente['precio_unitario']
+                            st.success("¡Cantidad actualizada!")
+                        else:
+                            items_cat.append({
+                                'nombre': nombre_item,
+                                'unidad': unidad,
+                                'cantidad': cantidad,
+                                'precio_unitario': precio_unitario,
+                                'total': total,
+                                'categoria': categoria_nombre,
+                                'notas': ''  # Campo notas agregado
+                            })
+                            st.success(f"Ítem agregado a '{categoria_nombre}'")
     
-    # Renderizar ítems por categoría
-    categorias_a_mostrar = [cat for cat in st.session_state['categorias'] if cat != 'general']
+    # ========== SECCIÓN DE EDICIÓN MEJORADA ==========
+    with st.expander("📝 Editar Items", expanded=False):
+        categorias_a_mostrar = [cat for cat in st.session_state['categorias'] if cat != 'general' and st.session_state['categorias'][cat]['items']]
+        
+        if not categorias_a_mostrar:
+            st.info("📭 No hay ítems para editar")
+            return st.session_state['categorias']
+            
+        for cat_nombre in categorias_a_mostrar:
+            items_cat = st.session_state['categorias'][cat_nombre]['items']
+            
+            st.write(f"### {cat_nombre}")
+
+            # Encabezados de columna mejorados
+            col1, col2, col3, col4, col5, col6, col7, col8 = st.columns([2.5, 1.5, 1.2, 1.5, 1.5, 1.8, 0.8, 0.8])
+            col1.write("**Descripción**")
+            col2.write("**Unidad**")
+            col3.write("**Cant.**")
+            col4.write("**P. Unitario**")
+            col5.write("**Total**")
+            col6.write("**Notas**")
+            col7.write("**Guardar**")
+            col8.write("**Eliminar**")
+
+            for index, item in enumerate(items_cat):
+                col1, col2, col3, col4, col5, col6, col7, col8 = st.columns([2.5, 1.5, 1.2, 1.5, 1.5, 1.8, 0.8, 0.8])
+
+                with col1:
+                    nuevo_nombre = st.text_input(
+                        "Nombre", 
+                        item['nombre'], 
+                        key=f"nombre_{cat_nombre}_{index}", 
+                        label_visibility="collapsed"
+                    )
+                with col2:
+                    nueva_unidad = st.selectbox(
+                        "Unidad", 
+                        ["m²", "m³", "Unidad", "Metro lineal", "Saco", "Metro", "Caja", "Kilo (kg)", "Galón (gal)", "Litro", "Par/Juego", "Plancha"],
+                        index=["m²", "m³", "Unidad", "Metro lineal", "Saco", "Metro", "Caja", "Kilo (kg)", "Galón (gal)", "Litro", "Par/Juego", "Plancha"].index(item['unidad']) if item['unidad'] in ["m²", "m³", "Unidad", "Metro lineal", "Saco", "Metro", "Caja", "Kilo (kg)", "Galón (gal)", "Litro", "Par/Juego", "Plancha"] else 2,
+                        key=f"unidad_{cat_nombre}_{index}", 
+                        label_visibility="collapsed"
+                    )
+                with col3:
+                    nueva_cantidad = st.number_input(
+                        "Cantidad", 
+                        min_value=0.0, 
+                        step=0.1, 
+                        value=item['cantidad'],
+                        key=f"cantidad_{cat_nombre}_{index}", 
+                        label_visibility="collapsed"
+                    )
+                with col4:
+                    nuevo_precio = st.number_input(
+                        "Precio", 
+                        min_value=0.0, 
+                        value=item['precio_unitario'],
+                        step=1.0,
+                        key=f"precio_{cat_nombre}_{index}", 
+                        label_visibility="collapsed"
+                    )
+                with col5:
+                    nuevo_total = nueva_cantidad * nuevo_precio
+                    st.text_input(
+                        "Total", 
+                        value=f"${nuevo_total:,.2f}", 
+                        disabled=True, 
+                        key=f"total_{cat_nombre}_{index}", 
+                        label_visibility="collapsed"
+                    )
+                with col6:
+                    nuevas_notas = st.text_input(
+                        "Notas",
+                        value=item.get('notas', ''),
+                        key=f"notas_{cat_nombre}_{index}",
+                        label_visibility="collapsed",
+                        placeholder="Notas..."
+                    )
+
+                with col7:
+                    if st.button("💾", key=f"guardar_{cat_nombre}_{index}", help="Guardar cambios"):
+                        st.session_state['categorias'][cat_nombre]['items'][index] = {
+                            'nombre': nuevo_nombre,
+                            'unidad': nueva_unidad,
+                            'cantidad': nueva_cantidad,
+                            'precio_unitario': nuevo_precio,
+                            'total': nuevo_total,
+                            'categoria': cat_nombre,
+                            'notas': nuevas_notas
+                        }
+                        st.success("¡Cambios guardados!")
+                        st.rerun()
+
+                with col8:
+                    if st.button("❌", key=f"eliminar_{cat_nombre}_{index}", help="Eliminar ítem"):
+                        del st.session_state['categorias'][cat_nombre]['items'][index]
+                        st.success("¡Ítem eliminado!")
+                        st.rerun()
     
-    if not categorias_a_mostrar:
-        st.info("📭 Aún no has agregado ítems a ninguna categoría.")
-        return
-
-    for cat_nombre in categorias_a_mostrar:
-        items_cat = st.session_state['categorias'][cat_nombre]['items']
-        
-        # Encabezado de la categoría
-        st.subheader(f"🛠️ {cat_nombre}", divider='gray')
-        
-        # Encabezados de columna
-        col_name, col_unit, col_qty, col_price, col_del = st.columns([3, 1.5, 1.5, 2, 0.7])
-        col_name.write("**Descripción/Notas**")
-        col_unit.write("**Unidad**")
-        col_qty.write("**Cant.**")
-        col_price.write("**P. Unitario**")
-        col_del.write("")
-
-
-        if items_cat:
-            for i in range(len(items_cat)):
-                # El renderizado gestiona la eliminación, por eso usamos el índice original
-                _render_item_input(cat_nombre, i)
-        else:
-            st.info(f"📭 No hay ítems para la categoría **{cat_nombre}**.")
-            st.button(f"🗑️ Eliminar categoría {cat_nombre}", key=f"del_cat_{cat_nombre}", help="Eliminar categoría vacía", 
-                      on_click=lambda c=cat_nombre: st.session_state['categorias'].pop(c) or st.rerun())
+    return st.session_state['categorias']
 
 def show_mano_obra():
     """Muestra el input para mano de obra general y por categoría."""
@@ -464,7 +404,7 @@ def show_mano_obra():
     # 2. Mano de Obra por Categoría (para categorías con ítems)
     st.markdown("##### Mano de Obra por Categoría (Adicional)")
     
-    categorias_a_mostrar = [cat for cat in st.session_state['categorias'] if cat != 'general']
+    categorias_a_mostrar = [cat for cat in st.session_state['categorias'] if cat != 'general' and st.session_state['categorias'][cat]['items']]
     
     if not categorias_a_mostrar:
         st.info("📭 Agrega ítems primero para asignar mano de obra por categoría.")
@@ -482,7 +422,6 @@ def show_mano_obra():
             step=100.0,
             key=f"mo_cat_{cat_nombre}"
         )
-
 def show_resumen():
     """Muestra el resumen final del presupuesto."""
     st.subheader("Resumen del Presupuesto", divider="green")
