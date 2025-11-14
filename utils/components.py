@@ -220,9 +220,9 @@ def show_items_presupuesto() -> Dict[str, Any]:
         col1, col2 = st.columns([2, 4])
         
         with col1:
-            st.markdown("#### 1️⃣ Seleccionar/Crear Categoría")
+            st.markdown("#### 1️⃣ Categoría")
             categoria_id, categoria_nombre = selector_categoria(
-                mostrar_label=False,
+                mostrar_label="Seleccionar o Crear categoría",
                 requerido=True,
                 key_suffix="principal"
             )
@@ -235,9 +235,9 @@ def show_items_presupuesto() -> Dict[str, Any]:
             with col_nombre:
                 nombre_item = st.text_input("Nombre del Ítem:", key="nombre_item_principal")
             with col_cantidad:
-                cantidad = st.number_input("Cantidad:", min_value=0.0, value=1.0, step=0.1, key="cantidad_principal")
+                cantidad = st.number_input("Cantidad:", min_value=0, value=0, step=1, key="cantidad_principal")
             with col_precio:
-                precio_unitario = st.number_input("Precio Unitario ($):", min_value=0.0, value=0.0, step=1.0, key="precio_principal")
+                precio_unitario = st.number_input("Precio Unitario ($):", min_value=0, value=0, step=1, key="precio_principal")
 
             # Segunda fila de inputs
             col_unidad, col_total, col_boton = st.columns(3)
@@ -324,8 +324,8 @@ def show_items_presupuesto() -> Dict[str, Any]:
                 with col3:
                     nueva_cantidad = st.number_input(
                         "Cantidad", 
-                        min_value=0.0, 
-                        step=0.1, 
+                        min_value=0, 
+                        step=1, 
                         value=item['cantidad'],
                         key=f"cantidad_{cat_nombre}_{index}", 
                         label_visibility="collapsed"
@@ -333,9 +333,9 @@ def show_items_presupuesto() -> Dict[str, Any]:
                 with col4:
                     nuevo_precio = st.number_input(
                         "Precio", 
-                        min_value=0.0, 
+                        min_value=0, 
                         value=item['precio_unitario'],
-                        step=1.0,
+                        step=1,
                         key=f"precio_{cat_nombre}_{index}", 
                         label_visibility="collapsed"
                     )
@@ -394,8 +394,8 @@ def show_mano_obra():
     st.session_state['categorias']['general']['mano_obra'] = st.number_input(
         "Mano de Obra General (valor único para el trabajo completo)",
         value=safe_numeric_value(st.session_state['categorias']['general'].get('mano_obra', 0)),
-        min_value=0.0,
-        step=1000.0,
+        min_value=0,
+        step=1,
         key="mo_general"
     )
 
@@ -413,76 +413,12 @@ def show_mano_obra():
     for cat_nombre in categorias_a_mostrar:
         # Aseguramos la inicialización de 'mano_obra'
         if 'mano_obra' not in st.session_state['categorias'][cat_nombre]:
-             st.session_state['categorias'][cat_nombre]['mano_obra'] = 0.0
+             st.session_state['categorias'][cat_nombre]['mano_obra'] = 0
              
         st.session_state['categorias'][cat_nombre]['mano_obra'] = st.number_input(
             f"Mano de Obra para: {cat_nombre}",
             value=safe_numeric_value(st.session_state['categorias'][cat_nombre].get('mano_obra', 0)),
-            min_value=0.0,
-            step=100.0,
+            min_value=0,
+            step=1,
             key=f"mo_cat_{cat_nombre}"
         )
-def show_resumen():
-    """Muestra el resumen final del presupuesto."""
-    st.subheader("Resumen del Presupuesto", divider="green")
-    
-    if 'categorias' not in st.session_state or not st.session_state['categorias']:
-        st.info("📭 Comience agregando ítems y mano de obra para ver el resumen.")
-        return
-
-    # Usar una lista para el resumen de categorías
-    resumen_data = []
-    total_general = 0.0
-
-    # 1. Mano de Obra General
-    mano_obra_general = safe_numeric_value(st.session_state['categorias']['general'].get('mano_obra', 0.0))
-    total_general += mano_obra_general
-    
-    if mano_obra_general > 0:
-         resumen_data.append({
-             'Categoría': 'Mano de Obra General',
-             'Total Ítems': 0.0,
-             'Mano de Obra': mano_obra_general,
-             'Total Categoría': mano_obra_general
-         })
-
-    # 2. Ítems por Categoría
-    for cat, data in st.session_state['categorias'].items():
-        if cat == 'general': 
-            continue
-            
-        items_total = sum(safe_numeric_value(item.get('total')) for item in data['items'])
-        mano_obra = safe_numeric_value(data.get('mano_obra', 0.0))
-        total_categoria = items_total + mano_obra
-        total_general += total_categoria
-
-        if total_categoria > 0:
-            resumen_data.append({
-                'Categoría': cat,
-                'Total Ítems': items_total,
-                'Mano de Obra': mano_obra,
-                'Total Categoría': total_categoria
-            })
-            
-    if not resumen_data:
-        st.info("📭 El presupuesto está vacío.")
-        return
-
-    # Mostrar resumen en DataFrame
-    df_resumen = pd.DataFrame(resumen_data)
-    
-    st.dataframe(
-        df_resumen,
-        column_config={
-            "Categoría": "Categoría",
-            "Total Ítems": st.column_config.NumberColumn("Total Ítems", format="$%d"),
-            "Mano de Obra": st.column_config.NumberColumn("Mano de Obra", format="$%d"),
-            "Total Categoría": st.column_config.NumberColumn("Total", format="$%d")
-        },
-        hide_index=True,
-        width="stretch"
-    )
-    
-    st.markdown(f"#### 💰 **TOTAL GENERAL DEL PRESUPUESTO:** **${total_general:,.2f}**")
-    
-    return total_general
