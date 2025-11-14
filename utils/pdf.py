@@ -28,7 +28,7 @@ def formato_moneda(valor: float) -> str:
 #   GENERAR PDF — Estilo moderno (Código B)
 # ============================================
 
-def generar_pdf_moderno(cliente: str, lugar: str, categorias: dict, descripcion: str = ""):
+def generar_pdf(cliente: str, lugar: str, categorias: dict, descripcion: str = ""):
     try:
         pdf = FPDF()
         pdf.add_page()
