@@ -3,7 +3,7 @@ import os
 import base64
 from datetime import datetime
 from fpdf import FPDF
-from database import save_presupuesto_completo, get_presupuesto_detallado
+from utils.database import save_presupuesto_completo, get_presupuesto_detallado
 
 # ==================== UTILIDADES ====================
 def capitalizar(texto: str) -> str:
