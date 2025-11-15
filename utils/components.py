@@ -182,6 +182,15 @@ def show_items_presupuesto() -> Dict[str, Any]:
                 requerido=True,
                 key_suffix="principal"
             )
+            
+            # 🟢 NUEVA LÓGICA DE INICIALIZACIÓN INMEDIATA 🟢
+            if categoria_id and categoria_nombre not in st.session_state['categorias']:
+                 st.session_state['categorias'][categoria_nombre] = {
+                    'categoria_id': categoria_id,  # Inicializar el ID inmediatamente
+                    'items': [], 
+                    'mano_obra': 0
+                 }
+            # ----------------------------------------------------
 
         with col2:
             st.markdown(f"#### 2️⃣ 📦 Agregar Ítems a: **{categoria_nombre}**")
