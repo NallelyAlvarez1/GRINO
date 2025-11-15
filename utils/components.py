@@ -183,13 +183,18 @@ def show_items_presupuesto() -> Dict[str, Any]:
                 key_suffix="principal"
             )
             
-            # 🟢 NUEVA LÓGICA DE INICIALIZACIÓN INMEDIATA 🟢
-            if categoria_id and categoria_nombre not in st.session_state['categorias']:
-                 st.session_state['categorias'][categoria_nombre] = {
-                    'categoria_id': categoria_id,  # Inicializar el ID inmediatamente
-                    'items': [], 
-                    'mano_obra': 0
-                 }
+                    # 🟢 ACTUALIZACIÓN: Asegurar que la categoría en session_state tenga el ID correcto
+            if categoria_id and categoria_nombre:
+                # Si la categoría no existe, inicializarla
+                if categoria_nombre not in st.session_state['categorias']:
+                    st.session_state['categorias'][categoria_nombre] = {
+                        'categoria_id': categoria_id,
+                        'items': [], 
+                        'mano_obra': 0
+                    }
+                else:
+                    # Si ya existe, actualizar el categoria_id por si cambió
+                    st.session_state['categorias'][categoria_nombre]['categoria_id'] = categoria_id
             # ----------------------------------------------------
 
         with col2:

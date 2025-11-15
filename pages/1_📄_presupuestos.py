@@ -66,8 +66,17 @@ def main():
     total_general = calcular_total(items_data)
 
     # 🚨 AÑADIR ESTE PRINT PARA DEPURAR 🚨
+        # 🚨 MEJOR DEPURACIÓN 🚨
     import json
-    st.code(json.dumps(items_data, indent=2)) 
+    st.subheader("🔍 Depuración - items_data")
+    
+    # Verificar IDs de categorías
+    for cat_nombre, cat_data in items_data.items():
+        has_id = 'categoria_id' in cat_data and cat_data['categoria_id'] is not None
+        status = "✅" if has_id else "❌"
+        st.write(f"{status} {cat_nombre}: ID = {cat_data.get('categoria_id', 'MISSING')}")
+    
+    st.code(json.dumps(items_data, indent=2, ensure_ascii=False))
     # -------------------------------------
 
     if st.button("📂 Guardar Presupuesto Completo", ...):

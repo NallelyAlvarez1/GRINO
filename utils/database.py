@@ -95,7 +95,7 @@ def create_categoria(nombre: str, user_id: str) -> Optional[int]:
 # ==================== FUNCIÓN PRINCIPAL PARA GUARDAR PRESUPUESTO ====================
 
 def save_presupuesto_completo(user_id: str, cliente_id: int, lugar_trabajo_id: int, descripcion: str, items_data: Dict[str, Any], total: float) -> Optional[int]:
-    """Guarda el presupuesto completo en la base de datos - VERSIÓN SIMPLIFICADA"""
+    """Guarda el presupuesto completo en la base de datos - VERSIÓN MEJORADA"""
     supabase = get_supabase_client()
     
     try:
@@ -119,8 +119,10 @@ def save_presupuesto_completo(user_id: str, cliente_id: int, lugar_trabajo_id: i
         items_to_insert = []
         
         for categoria_nombre, data in items_data.items():
-            # Obtener categoria_id
+            # 🔥 MEJOR DEPURACIÓN
             categoria_id = data.get('categoria_id')
+            st.write(f"🔍 Procesando categoría: {categoria_nombre}, ID: {categoria_id}")
+            
             if not categoria_id:
                 st.warning(f"⚠️ Saltando categoría '{categoria_nombre}' - sin ID")
                 continue
@@ -130,16 +132,20 @@ def save_presupuesto_completo(user_id: str, cliente_id: int, lugar_trabajo_id: i
             if mano_obra > 0:
                 items_to_insert.append({
                     "presupuesto_id": presupuesto_id,
-                    "categoria_id": categoria_id, # <-- Clave correcta para la DB
+                    "categoria_id": categoria_id,
                     "nombre_personalizado": f"Mano de Obra - {categoria_nombre}",
-                    # ...
+                    "unidad": "Servicio",
+                    "cantidad": 1,
+                    "precio_unitario": mano_obra,
+                    "total": mano_obra,
+                    "notas": f"Mano de obra para {categoria_nombre}"
                 })
 
             # Insertar items normales
             for item in data.get('items', []):
                 items_to_insert.append({
                     "presupuesto_id": presupuesto_id,
-                    "categoria_id": categoria_id, # <-- CLAVE CRÍTICA AQUÍ
+                    "categoria_id": categoria_id,
                     "nombre_personalizado": item.get('nombre', ''),
                     "unidad": item.get('unidad', 'Unidad'),
                     "cantidad": item.get('cantidad', 0),
@@ -152,6 +158,11 @@ def save_presupuesto_completo(user_id: str, cliente_id: int, lugar_trabajo_id: i
         if items_to_insert:
             items_response = supabase.table("items_en_presupuesto").insert(items_to_insert).execute()
             st.success(f"✅ {len(items_to_insert)} items guardados para el presupuesto {presupuesto_id}")
+            
+            # 🔥 VERIFICACIÓN EXTRA
+            st.write(f"📦 Items a guardar: {len(items_to_insert)}")
+            for item in items_to_insert[:3]:  # Mostrar primeros 3 para verificación
+                st.write(f"  - {item['nombre_personalizado']} (Cat ID: {item['categoria_id']})")
         else:
             st.warning("⚠️ No hay items para guardar")
 
@@ -159,6 +170,7 @@ def save_presupuesto_completo(user_id: str, cliente_id: int, lugar_trabajo_id: i
 
     except Exception as e:
         st.error(f"❌ Error al guardar presupuesto completo: {str(e)}")
+        st.exception(e)  # 🔥 MOSTRAR TRAZA COMPLETA
         return None
 
 # ==================== FUNCIONES PARA CONSULTAS ====================
