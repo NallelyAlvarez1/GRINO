@@ -130,20 +130,16 @@ def save_presupuesto_completo(user_id: str, cliente_id: int, lugar_trabajo_id: i
             if mano_obra > 0:
                 items_to_insert.append({
                     "presupuesto_id": presupuesto_id,
-                    "categoria_id": categoria_id,
+                    "categoria_id": categoria_id, # <-- Clave correcta para la DB
                     "nombre_personalizado": f"Mano de Obra - {categoria_nombre}",
-                    "unidad": "Global",
-                    "cantidad": 1,
-                    "precio_unitario": mano_obra,
-                    "total": mano_obra,
-                    "notas": f"Mano de obra para {categoria_nombre}"
+                    # ...
                 })
 
             # Insertar items normales
             for item in data.get('items', []):
                 items_to_insert.append({
                     "presupuesto_id": presupuesto_id,
-                    "categoria_id": categoria_id,
+                    "categoria_id": categoria_id, # <-- CLAVE CRÍTICA AQUÍ
                     "nombre_personalizado": item.get('nombre', ''),
                     "unidad": item.get('unidad', 'Unidad'),
                     "cantidad": item.get('cantidad', 0),
