@@ -64,10 +64,14 @@ def main():
 
     # ========== GUARDADO ==========
     total_general = calcular_total(items_data)
-    
-    if st.button("📂 Guardar Presupuesto Completo", type="primary",
-            help="Revise todos los datos antes de guardar"):
 
+    # 🚨 AÑADIR ESTE PRINT PARA DEPURAR 🚨
+    import json
+    st.code(json.dumps(items_data, indent=2)) 
+    # -------------------------------------
+
+    if st.button("📂 Guardar Presupuesto Completo", ...):
+    
         with st.spinner("Guardando presupuesto..."):
             try:
                 presupuesto_id = save_presupuesto_completo(
