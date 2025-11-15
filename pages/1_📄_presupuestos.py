@@ -78,7 +78,10 @@ def main():
     
     st.code(json.dumps(items_data, indent=2, ensure_ascii=False))
     # -------------------------------------
-
+    # 🚨 DEPURACIÓN: Mostrar el estado de las categorías en la sesión
+    st.subheader("🔍 Depuración - st.session_state['categorias']")
+    st.write(st.session_state['categorias'])
+    
     if st.button("📂 Guardar Presupuesto Completo", ...):
     
         with st.spinner("Guardando presupuesto..."):
