@@ -87,13 +87,13 @@ def main():
                         st.stop()
 
                     # Generar PDF
+ # Llama a la función generar_pdf con los nombres de argumento correctos
                     pdf_path = generar_pdf(
-                        cliente=cliente_nombre,
-                        lugar=lugar_nombre,
+                        cliente_nombre=cliente_nombre,      # ¡CORREGIDO!
                         categorias=items_data,
+                        lugar_cliente=lugar_nombre,         # ¡CORREGIDO!
                         descripcion=descripcion
                     )
-
 
                     # VALIDACIÓN DE RUTA PDF
                     if not pdf_path or not os.path.exists(pdf_path):
